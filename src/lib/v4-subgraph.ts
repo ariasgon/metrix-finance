@@ -495,9 +495,11 @@ export async function fetchV4PositionsHistory(
         console.log(`V4 Position ${tokenId} (ticks ${tickLower}-${tickUpper}): deposits=${depositedToken0}/${depositedToken1} ($${depositedUSD}), claims=${claimedToken0}/${claimedToken1}`);
       }
 
+      // If no mint data found, use 0 as timestamp to indicate unknown creation time
+      // The consuming code should treat 0 or invalid timestamps as "unknown" and use a default age
       results.set(tokenId, {
         tokenId,
-        createdTimestamp: mint?.timestamp || Date.now(),
+        createdTimestamp: mint?.timestamp || 0, // Use 0 instead of Date.now() to indicate unknown
         createdBlockNumber: mint?.blockNumber || 0,
         mintTxHash: mint?.hash || '',
         depositedToken0,
