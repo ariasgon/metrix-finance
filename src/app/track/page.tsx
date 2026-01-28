@@ -267,9 +267,14 @@ export default function TrackPage() {
   const roi = totalOriginalInvestment > 0 ? (profitLoss / totalOriginalInvestment) * 100 : 0;
 
   // APR calculation: (earnings / days) * 365 / original investment
-  const avgPositionAgeDays = walletPositionsTotals.avgPositionAgeDays || 30;
-  const actualDailyYield = avgPositionAgeDays > 0 ? totalEarnings / avgPositionAgeDays : 0;
-  const apr = totalOriginalInvestment > 0 ? ((actualDailyYield * 365) / totalOriginalInvestment) * 100 : 0;
+  // Minimum 1 day to avoid division issues
+  const avgPositionAgeDays = Math.max(1, walletPositionsTotals.avgPositionAgeDays || 30);
+  const apr = totalOriginalInvestment > 0
+    ? ((totalEarnings / avgPositionAgeDays) * 365 / totalOriginalInvestment) * 100
+    : 0;
+
+  // Daily yield for projections
+  const actualDailyYield = totalEarnings / avgPositionAgeDays;
 
   // Projections based on actual daily yield
   const projection24h = actualDailyYield;

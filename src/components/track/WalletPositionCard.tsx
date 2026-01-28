@@ -212,14 +212,16 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
     ? v4PositionHistory.createdTimestamp
     : positionHistory?.createdTimestamp;
 
-  // Calculate position age in days
-  const positionAgeDays = createdTimestamp
+  // Calculate position age in days (minimum 1 day to avoid division issues)
+  const rawPositionAgeDays = createdTimestamp
     ? (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24)
     : 30; // Default to 30 days if no history
+  const positionAgeDays = Math.max(1, rawPositionAgeDays);
 
   // APR = (earnings / days) * 365 / original investment * 100
-  const dailyEarnings = positionAgeDays > 0 ? earnings / positionAgeDays : 0;
-  const apr = originalInvestmentUSD > 0 ? ((dailyEarnings * 365) / originalInvestmentUSD) * 100 : 0;
+  const apr = originalInvestmentUSD > 0
+    ? ((earnings / positionAgeDays) * 365 / originalInvestmentUSD) * 100
+    : 0;
 
   // Format opened date from position history
   const openedDate = createdTimestamp
