@@ -28,13 +28,35 @@ function formatCompactLiquidity(liquidity: bigint): string {
   return num.toFixed(2);
 }
 
-// Price Range Slider Component
-function PriceRangeSlider({ tickLower, tickUpper, currentTick, inRange }: {
+// Convert tick to price with decimal adjustment
+function tickToPrice(tick: number, decimals0: number, decimals1: number): number {
+  return Math.pow(1.0001, tick) * Math.pow(10, decimals0 - decimals1);
+}
+
+// Format price for display
+function formatPrice(price: number): string {
+  if (price >= 1000000) return (price / 1000000).toFixed(2) + 'M';
+  if (price >= 1000) return (price / 1000).toFixed(2) + 'K';
+  if (price >= 1) return price.toFixed(2);
+  if (price >= 0.0001) return price.toFixed(6);
+  return price.toExponential(2);
+}
+
+// Price Range Slider Component with Tooltip
+function PriceRangeSlider({ tickLower, tickUpper, currentTick, inRange, token0Decimals, token1Decimals, token0Symbol, token1Symbol, token0Price, token1Price }: {
   tickLower: number;
   tickUpper: number;
   currentTick?: number;
   inRange: boolean;
+  token0Decimals?: number;
+  token1Decimals?: number;
+  token0Symbol?: string;
+  token1Symbol?: string;
+  token0Price?: number;
+  token1Price?: number;
 }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   // Calculate the position of the current tick within the range
   // We need to visualize where the current price is relative to the position's range
   const rangeWidth = tickUpper - tickLower;
@@ -50,8 +72,57 @@ function PriceRangeSlider({ tickLower, tickUpper, currentTick, inRange }: {
     ? Math.max(0, Math.min(100, ((currentTick - visualMin) / visualRange) * 100))
     : 50;
 
+  // Calculate prices from ticks
+  const decimals0 = token0Decimals || 18;
+  const decimals1 = token1Decimals || 18;
+  const minPrice = tickToPrice(tickLower, decimals0, decimals1);
+  const maxPrice = tickToPrice(tickUpper, decimals0, decimals1);
+  const currentPrice = currentTick !== undefined
+    ? tickToPrice(currentTick, decimals0, decimals1)
+    : (minPrice + maxPrice) / 2;
+
+  // Calculate USD values (price of token0 in terms of token1, then convert to USD)
+  // For a pool like WETH/USDC, if token0=WETH and token1=USDC:
+  // - minPrice/maxPrice/currentPrice are in token1 per token0 (e.g., USDC per WETH)
+  // - To get USD value: multiply by token1Price (which is $1 for USDC)
+  const t1Price = token1Price || 1;
+  const minPriceUSD = minPrice * t1Price;
+  const maxPriceUSD = maxPrice * t1Price;
+  const currentPriceUSD = currentPrice * t1Price;
+
   return (
-    <div className="relative w-full h-2 mt-2">
+    <div
+      className="relative w-full h-2 mt-2 cursor-pointer group"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {/* Tooltip */}
+      {showTooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50 whitespace-nowrap text-xs">
+          <div className="space-y-1">
+            <div className="flex justify-between gap-4">
+              <span className="text-muted">Min:</span>
+              <span className="font-medium">${formatPrice(minPriceUSD)}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted">Current:</span>
+              <span className={cn("font-medium", inRange ? "text-success" : "text-danger")}>
+                ${formatPrice(currentPriceUSD)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted">Max:</span>
+              <span className="font-medium">${formatPrice(maxPriceUSD)}</span>
+            </div>
+            <div className="text-[10px] text-muted mt-1 pt-1 border-t border-gray-700">
+              {token1Symbol || 'Token1'} per {token0Symbol || 'Token0'}
+            </div>
+          </div>
+          {/* Tooltip arrow */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+
       {/* Background track */}
       <div className="absolute inset-0 bg-gray-700 rounded-full" />
 
@@ -195,24 +266,6 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
   // This ensures APR is never artificially inflated by bad subgraph data
   const safeOriginalInvestment = Math.max(originalInvestmentUSD, totalValueUSD, 1);
 
-  // Debug logging (remove in production)
-  console.log('[WalletPositionCard] APR Calculation:', {
-    tokenId: position.tokenId.toString(),
-    version: position.version,
-    totalValueUSD,
-    originalInvestmentUSD,
-    safeOriginalInvestment,
-    earnings,
-    unclaimedFeesUSD,
-    claimedFeesUSD,
-    hasV4History: !!v4PositionHistory,
-    hasV3History: !!positionHistory,
-    createdTimestamp,
-    positionAgeDays,
-    rawApr,
-    cappedApr: apr,
-  });
-
   // Profit/Loss = Total Current Value (position + fees) - Original Investment
   // This is the actual capital gain/loss
   const currentTotalValue = totalValueUSD + unclaimedFeesUSD + claimedFeesUSD;
@@ -244,10 +297,29 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
   // Ensure minimum 1 day for APR calculation - this prevents inflated APR for new positions
   const positionAgeDays = Math.max(1, rawPositionAgeDays);
 
-  // APR = (earnings / days) * 365 / original investment * 100
+  // APR = (earnings / days) * 365 / current liquidity * 100
+  // Use current liquidity value for APR (yield rate on current capital)
   // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
-  const rawApr = ((earnings / positionAgeDays) * 365 / safeOriginalInvestment) * 100;
+  const aprBase = Math.max(totalValueUSD, 1);
+  const rawApr = ((earnings / positionAgeDays) * 365 / aprBase) * 100;
   const apr = Math.min(rawApr, 10000); // Cap at 10,000% APR
+
+  // Debug logging (remove in production)
+  console.log('[WalletPositionCard] APR Calculation:', {
+    tokenId: position.tokenId.toString(),
+    version: position.version,
+    totalValueUSD,
+    aprBase,
+    earnings,
+    unclaimedFeesUSD,
+    claimedFeesUSD,
+    hasV4History: !!v4PositionHistory,
+    hasV3History: !!positionHistory,
+    createdTimestamp,
+    positionAgeDays,
+    rawApr,
+    cappedApr: apr,
+  });
 
   // Format opened date from position history
   const openedDate = createdTimestamp
@@ -372,6 +444,12 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
             tickUpper={position.tickUpper}
             currentTick={position.currentTick}
             inRange={inRange}
+            token0Decimals={token0Decimals}
+            token1Decimals={token1Decimals}
+            token0Symbol={token0Symbol}
+            token1Symbol={token1Symbol}
+            token0Price={token0Price}
+            token1Price={token1Price}
           />
         </div>
       </div>

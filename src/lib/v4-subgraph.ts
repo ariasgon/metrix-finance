@@ -8,16 +8,15 @@ const V4_POSITION_MANAGER_ETH = '0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e';
 // The Graph decentralized network (requires API key)
 const GRAPH_API_KEY = process.env.NEXT_PUBLIC_GRAPH_API_KEY;
 
-// V4 Subgraph on The Graph - use the official Uniswap V4 Ethereum subgraph
-const V4_SUBGRAPH_ID = '6XvRX3WHSvzBVTiPdF66XSBVbxWuHqijWANbjJxRDyzr';
+// V4 Subgraph on The Graph - use the official Uniswap V4 Ethereum mainnet subgraph
+// This is the current official subgraph from Uniswap docs: https://docs.uniswap.org/api/subgraph/overview
+const V4_SUBGRAPH_ID = 'DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G';
 const V4_SUBGRAPH_URL = GRAPH_API_KEY
   ? `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${V4_SUBGRAPH_ID}`
   : null;
 
-// Legacy subgraph URL (for position lookups)
-const DECENTRALIZED_SUBGRAPH_URL = GRAPH_API_KEY
-  ? `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G`
-  : null;
+// Use the same subgraph for position lookups (unified endpoint)
+const DECENTRALIZED_SUBGRAPH_URL = V4_SUBGRAPH_URL;
 
 export interface V4PositionBasic {
   id: string;
@@ -86,6 +85,18 @@ const V4_POSITION_DETAILS_QUERY = gql`
         timestamp
         blockNumber
       }
+    }
+  }
+`;
+
+// Query for position creation timestamp from V4 subgraph
+const V4_POSITION_CREATED_QUERY = gql`
+  query GetV4PositionCreated($tokenId: BigInt!) {
+    positions(where: { tokenId: $tokenId }, first: 1) {
+      id
+      tokenId
+      createdAtTimestamp
+      origin
     }
   }
 `;
@@ -343,6 +354,9 @@ export async function fetchV4PositionHistory(
   }
 }
 
+// Track if we've already logged that modifyLiquidities is not available
+let modifyLiquiditiesUnavailableLogged = false;
+
 // Fetch ModifyLiquidity events from V4 subgraph for a user
 async function fetchModifyLiquidityEvents(
   ownerAddress: string
@@ -378,7 +392,18 @@ async function fetchModifyLiquidityEvents(
 
     console.log(`Found ${allEvents.length} ModifyLiquidity events for user`);
     return allEvents;
-  } catch (error) {
+  } catch (error: unknown) {
+    // Check if this is a schema error (field doesn't exist)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('has no field') || errorMessage.includes('modifyLiquidities')) {
+      // This subgraph doesn't have modifyLiquidities - log once and return empty
+      if (!modifyLiquiditiesUnavailableLogged) {
+        console.log('[V4 Subgraph] modifyLiquidities query not available in this subgraph - using fallback data');
+        modifyLiquiditiesUnavailableLogged = true;
+      }
+      return [];
+    }
+    // For other errors, log them
     console.error('Error fetching ModifyLiquidity events:', error);
     return [];
   }
@@ -422,6 +447,29 @@ function calculateDepositsAndClaims(
   return { depositedToken0, depositedToken1, depositedUSD, claimedToken0, claimedToken1 };
 }
 
+// Helper to fetch position creation time from V4 subgraph
+async function fetchV4PositionCreatedFromSubgraph(tokenId: string): Promise<number | null> {
+  if (!V4_SUBGRAPH_URL) return null;
+
+  try {
+    const client = new GraphQLClient(V4_SUBGRAPH_URL);
+    const data = await client.request<{ positions: Array<{ createdAtTimestamp: string }> }>(
+      V4_POSITION_CREATED_QUERY,
+      { tokenId: tokenId }
+    );
+
+    if (data.positions && data.positions.length > 0 && data.positions[0].createdAtTimestamp) {
+      const timestamp = parseInt(data.positions[0].createdAtTimestamp) * 1000;
+      console.log(`[V4 Subgraph] Found position ${tokenId} created at ${new Date(timestamp).toISOString()}`);
+      return timestamp;
+    }
+  } catch (error) {
+    // Silently fail - subgraph might not have this field
+    console.log(`[V4 Subgraph] Could not fetch creation time for position ${tokenId}`);
+  }
+  return null;
+}
+
 // Batch fetch V4 position histories with deposits and claims
 export async function fetchV4PositionsHistory(
   tokenIds: string[],
@@ -431,7 +479,16 @@ export async function fetchV4PositionsHistory(
   const results = new Map<string, V4PositionHistory>();
 
   try {
-    // Step 1: Get mint timestamps from Etherscan
+    // Step 1: Try to get creation timestamps from V4 subgraph first
+    const subgraphTimestamps = new Map<string, number>();
+    for (const tokenId of tokenIds) {
+      const timestamp = await fetchV4PositionCreatedFromSubgraph(tokenId);
+      if (timestamp) {
+        subgraphTimestamps.set(tokenId, timestamp);
+      }
+    }
+
+    // Step 2: Get mint timestamps from Etherscan (as fallback)
     const apiKey = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
     const baseUrl = 'https://api.etherscan.io/api';
     const url = `${baseUrl}?module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=asc${apiKey ? `&apikey=${apiKey}` : ''}`;
@@ -443,33 +500,52 @@ export async function fetchV4PositionsHistory(
     const mintData = new Map<string, { timestamp: number; blockNumber: number; hash: string }>();
 
     if (data.status === '1' && data.result) {
-      for (const tokenId of tokenIds) {
-        const mintTx = data.result.find((tx: any) =>
-          tx.tokenID === tokenId &&
-          tx.from === '0x0000000000000000000000000000000000000000'
-        );
+      console.log(`[Etherscan] Found ${data.result.length} NFT transfers for V4 Position Manager`);
 
-        const transferTx = mintTx || data.result.find((tx: any) =>
-          tx.tokenID === tokenId &&
-          tx.to.toLowerCase() === ownerAddress.toLowerCase()
-        );
+      for (const tokenId of tokenIds) {
+        // Normalize tokenId for comparison (both as string without leading zeros)
+        const normalizedTokenId = BigInt(tokenId).toString();
+
+        // Find mint transaction (from address 0x0)
+        const mintTx = data.result.find((tx: any) => {
+          const txTokenId = BigInt(tx.tokenID).toString();
+          return txTokenId === normalizedTokenId &&
+            tx.from.toLowerCase() === '0x0000000000000000000000000000000000000000';
+        });
+
+        // If no mint, find any transfer TO the user
+        const transferTx = mintTx || data.result.find((tx: any) => {
+          const txTokenId = BigInt(tx.tokenID).toString();
+          return txTokenId === normalizedTokenId &&
+            tx.to.toLowerCase() === ownerAddress.toLowerCase();
+        });
 
         if (transferTx) {
+          const timestamp = parseInt(transferTx.timeStamp) * 1000;
+          console.log(`[Etherscan] Found position ${tokenId} transfer at ${new Date(timestamp).toISOString()}`);
           mintData.set(tokenId, {
-            timestamp: parseInt(transferTx.timeStamp) * 1000,
+            timestamp,
             blockNumber: parseInt(transferTx.blockNumber),
             hash: transferTx.hash,
           });
+        } else {
+          console.log(`[Etherscan] No transfer found for position ${tokenId}`);
         }
       }
+    } else {
+      console.log(`[Etherscan] API response status: ${data.status}, message: ${data.message}`);
     }
 
-    // Step 2: Fetch ModifyLiquidity events from V4 subgraph
+    // Step 3: Fetch ModifyLiquidity events from V4 subgraph
     const modifyEvents = await fetchModifyLiquidityEvents(ownerAddress);
 
-    // Step 3: Match events to positions and calculate deposits/claims
+    // Step 4: Match events to positions and calculate deposits/claims
     for (const tokenId of tokenIds) {
-      const mint = mintData.get(tokenId);
+      // Prefer subgraph timestamp, fallback to Etherscan
+      const subgraphTs = subgraphTimestamps.get(tokenId);
+      const etherscanData = mintData.get(tokenId);
+      const createdTimestamp = subgraphTs || etherscanData?.timestamp || 0;
+
       const positionInfo = positions?.find((p) => p.tokenId === tokenId);
 
       // Default values
@@ -495,13 +571,18 @@ export async function fetchV4PositionsHistory(
         console.log(`V4 Position ${tokenId} (ticks ${tickLower}-${tickUpper}): deposits=${depositedToken0}/${depositedToken1} ($${depositedUSD}), claims=${claimedToken0}/${claimedToken1}`);
       }
 
-      // If no mint data found, use 0 as timestamp to indicate unknown creation time
-      // The consuming code should treat 0 or invalid timestamps as "unknown" and use a default age
+      // Log final timestamp source
+      if (createdTimestamp > 0) {
+        console.log(`[V4 History] Position ${tokenId} created: ${new Date(createdTimestamp).toISOString()} (source: ${subgraphTs ? 'subgraph' : 'etherscan'})`);
+      } else {
+        console.log(`[V4 History] Position ${tokenId}: creation time UNKNOWN - will use default 30 days`);
+      }
+
       results.set(tokenId, {
         tokenId,
-        createdTimestamp: mint?.timestamp || 0, // Use 0 instead of Date.now() to indicate unknown
-        createdBlockNumber: mint?.blockNumber || 0,
-        mintTxHash: mint?.hash || '',
+        createdTimestamp,
+        createdBlockNumber: etherscanData?.blockNumber || 0,
+        mintTxHash: etherscanData?.hash || '',
         depositedToken0,
         depositedToken1,
         depositedUSD,

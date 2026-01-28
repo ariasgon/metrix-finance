@@ -294,21 +294,22 @@ export default function TrackPage() {
   // ROI: Total profit relative to initial investment
   const roi = safeOriginalInvestment > 0 ? (profitLoss / safeOriginalInvestment) * 100 : 0;
 
-  // APR calculation: (earnings / days) * 365 / original investment
-  // Minimum 1 day to avoid division issues
+  // APR calculation: (earnings / days) * 365 / investment * 100
+  // Use current liquidity as the base for yield rate APR (how much you're earning on what you have)
+  // This gives a clearer picture of current yield rate
   const avgPositionAgeDays = Math.max(1, walletPositionsTotals.avgPositionAgeDays || 30);
-  const rawApr = ((totalEarnings / avgPositionAgeDays) * 365 / safeOriginalInvestment) * 100;
+
+  // Use current liquidity value for APR denominator (yield rate on current capital)
+  const aprBase = Math.max(totalValue, 1);
+  const rawApr = ((totalEarnings / avgPositionAgeDays) * 365 / aprBase) * 100;
   // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
   const apr = Math.min(rawApr, 10000);
-
-  // Daily yield for projections
-  const actualDailyYield = totalEarnings / avgPositionAgeDays;
 
   // Debug logging
   console.log('[Track Page] Portfolio APR Calculation:', {
     totalValue,
     totalOriginalInvestment,
-    safeOriginalInvestment,
+    aprBase,
     totalEarnings,
     avgPositionAgeDays,
     rawApr,
@@ -316,10 +317,12 @@ export default function TrackPage() {
     positionCount: walletPositions.length,
   });
 
-  // Projections based on actual daily yield
-  const projection24h = actualDailyYield;
-  const projection7d = actualDailyYield * 7;
-  const projection30d = actualDailyYield * 30;
+  // Projections based on APR applied to current liquidity
+  // This projects future earnings based on current yield rate and current capital
+  const dailyYieldRate = apr / 100 / 365; // Daily yield as a decimal
+  const projection24h = totalValue * dailyYieldRate;
+  const projection7d = totalValue * dailyYieldRate * 7;
+  const projection30d = totalValue * dailyYieldRate * 30;
 
   // Filter positions based on search and filters
   const filteredPositions = useMemo(() => {
