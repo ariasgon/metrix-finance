@@ -305,13 +305,15 @@ export default function TrackPage() {
   const actualDailyYield = totalEarnings / avgPositionAgeDays;
 
   // Debug logging
-  console.log('Portfolio APR Debug:', {
+  console.log('[Track Page] Portfolio APR Calculation:', {
     totalValue,
     totalOriginalInvestment,
     safeOriginalInvestment,
     totalEarnings,
     avgPositionAgeDays,
-    apr,
+    rawApr,
+    cappedApr: apr,
+    positionCount: walletPositions.length,
   });
 
   // Projections based on actual daily yield
@@ -350,6 +352,14 @@ export default function TrackPage() {
       return true;
     });
   }, [walletPositions, searchQuery, networkFilter, exchangeFilter, positionFilter]);
+
+  // Debug: Log filtered positions
+  console.log('[Track Page] Positions filter:', {
+    totalPositions: walletPositions.length,
+    filteredPositions: filteredPositions.length,
+    positionFilter,
+    positions: filteredPositions.map(p => ({ id: p.tokenId.toString(), liquidity: p.liquidity.toString() })),
+  });
 
   // Get unique networks for filter dropdown
   const uniqueNetworks = useMemo(() => {

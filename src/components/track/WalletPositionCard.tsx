@@ -91,6 +91,9 @@ function PriceRangeSlider({ tickLower, tickUpper, currentTick, inRange }: {
 }
 
 export function WalletPositionCard({ position, prices: externalPrices, positionHistory, v4PositionHistory }: WalletPositionCardProps) {
+  // Debug: Log when component renders
+  console.log('[WalletPositionCard] Rendering position:', position.tokenId.toString());
+
   const [localPrices, setLocalPrices] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -193,14 +196,21 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
   const safeOriginalInvestment = Math.max(originalInvestmentUSD, totalValueUSD, 1);
 
   // Debug logging (remove in production)
-  console.log('APR Debug:', {
+  console.log('[WalletPositionCard] APR Calculation:', {
     tokenId: position.tokenId.toString(),
+    version: position.version,
     totalValueUSD,
     originalInvestmentUSD,
     safeOriginalInvestment,
     earnings,
     unclaimedFeesUSD,
     claimedFeesUSD,
+    hasV4History: !!v4PositionHistory,
+    hasV3History: !!positionHistory,
+    createdTimestamp,
+    positionAgeDays,
+    rawApr,
+    cappedApr: apr,
   });
 
   // Profit/Loss = Total Current Value (position + fees) - Original Investment
