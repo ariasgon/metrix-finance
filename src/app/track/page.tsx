@@ -157,8 +157,10 @@ export default function TrackPage() {
             ? v4History.depositedUSD
             : depositsAtCurrentPrices;
 
-          // Safety: if calculated value is too small, use current position value
-          if (originalInvestment < 1) {
+          // Safety: if calculated value is unreasonably small, use current position value
+          // Original investment shouldn't be less than 10% of current value in most cases
+          const minReasonable = Math.max(1, positionValue * 0.1);
+          if (originalInvestment < minReasonable) {
             originalInvestment = positionValue > 0 ? positionValue : 1;
           }
 
@@ -189,8 +191,10 @@ export default function TrackPage() {
           ? v3History.depositedUSD
           : depositsAtCurrentPrices;
 
-        // Safety: if calculated value is too small, use current position value
-        if (originalInvestment < 1) {
+        // Safety: if calculated value is unreasonably small, use current position value
+        // Original investment shouldn't be less than 10% of current value in most cases
+        const minReasonable = Math.max(1, positionValue * 0.1);
+        if (originalInvestment < minReasonable) {
           originalInvestment = positionValue > 0 ? positionValue : 1;
         }
 

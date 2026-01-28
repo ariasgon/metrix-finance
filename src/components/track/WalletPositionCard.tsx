@@ -184,9 +184,11 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
       : depositsAtCurrentPrices;
   }
 
-  // Safety check: if originalInvestmentUSD is 0 or unreasonably small, use current value as fallback
-  // This prevents division by near-zero which causes astronomical APR/P&L values
-  if (originalInvestmentUSD < 1) {
+  // Safety check: ensure originalInvestmentUSD is reasonable
+  // If it's less than $1 OR much smaller than current value (likely bad data), use current value
+  // A position's original investment shouldn't be less than 10% of current value in most cases
+  const minReasonableInvestment = Math.max(1, totalValueUSD * 0.1);
+  if (originalInvestmentUSD < minReasonableInvestment) {
     originalInvestmentUSD = totalValueUSD > 0 ? totalValueUSD : 1;
     depositsAtCurrentPrices = originalInvestmentUSD;
   }
