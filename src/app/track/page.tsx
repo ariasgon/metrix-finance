@@ -171,15 +171,26 @@ export default function TrackPage() {
           totalClaimedFees += (v4History.claimedToken0 * token0Price) + (v4History.claimedToken1 * token1Price);
         } else {
           // Fallback to current value if no deposit data
-          totalOriginalInvestment += positionValue;
-          totalHodlValue += positionValue;
+          totalOriginalInvestment += positionValue > 0 ? positionValue : 0;
+          totalHodlValue += positionValue > 0 ? positionValue : 0;
         }
 
         // Track position age from mint transaction
-        if (v4History.createdTimestamp < oldestPositionTimestamp) {
-          oldestPositionTimestamp = v4History.createdTimestamp;
+        // Validate timestamp is valid (positive and in the past)
+        const now = Date.now();
+        const validTimestamp = v4History.createdTimestamp > 0 && v4History.createdTimestamp < now
+          ? v4History.createdTimestamp
+          : null;
+
+        if (validTimestamp && validTimestamp < oldestPositionTimestamp) {
+          oldestPositionTimestamp = validTimestamp;
         }
-        const positionAgeDays = (Date.now() - v4History.createdTimestamp) / (1000 * 60 * 60 * 24);
+
+        // Calculate position age, with minimum 1 day per position to prevent APR inflation
+        const rawAgeDays = validTimestamp
+          ? (now - validTimestamp) / (1000 * 60 * 60 * 24)
+          : 30; // Default to 30 days if no valid timestamp
+        const positionAgeDays = Math.max(1, rawAgeDays); // Minimum 1 day per position
         totalPositionAgeDays += positionAgeDays;
       } else if (!isV4 && v3History) {
         // V3 position with history from The Graph
@@ -204,11 +215,21 @@ export default function TrackPage() {
         // Claimed fees
         totalClaimedFees += (v3History.claimedFees0 * token0Price) + (v3History.claimedFees1 * token1Price);
 
-        // Track position age
-        if (v3History.createdTimestamp < oldestPositionTimestamp) {
-          oldestPositionTimestamp = v3History.createdTimestamp;
+        // Track position age - validate timestamp is valid
+        const now = Date.now();
+        const validTimestamp = v3History.createdTimestamp > 0 && v3History.createdTimestamp < now
+          ? v3History.createdTimestamp
+          : null;
+
+        if (validTimestamp && validTimestamp < oldestPositionTimestamp) {
+          oldestPositionTimestamp = validTimestamp;
         }
-        const positionAgeDays = (Date.now() - v3History.createdTimestamp) / (1000 * 60 * 60 * 24);
+
+        // Calculate position age, with minimum 1 day per position to prevent APR inflation
+        const rawAgeDays = validTimestamp
+          ? (now - validTimestamp) / (1000 * 60 * 60 * 24)
+          : 30; // Default to 30 days if no valid timestamp
+        const positionAgeDays = Math.max(1, rawAgeDays); // Minimum 1 day per position
         totalPositionAgeDays += positionAgeDays;
       } else {
         // No history available - estimate deposits as current value
@@ -276,7 +297,9 @@ export default function TrackPage() {
   // APR calculation: (earnings / days) * 365 / original investment
   // Minimum 1 day to avoid division issues
   const avgPositionAgeDays = Math.max(1, walletPositionsTotals.avgPositionAgeDays || 30);
-  const apr = ((totalEarnings / avgPositionAgeDays) * 365 / safeOriginalInvestment) * 100;
+  const rawApr = ((totalEarnings / avgPositionAgeDays) * 365 / safeOriginalInvestment) * 100;
+  // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
+  const apr = Math.min(rawApr, 10000);
 
   // Daily yield for projections
   const actualDailyYield = totalEarnings / avgPositionAgeDays;

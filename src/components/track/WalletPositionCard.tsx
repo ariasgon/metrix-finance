@@ -222,13 +222,22 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
     : positionHistory?.createdTimestamp;
 
   // Calculate position age in days (minimum 1 day to avoid division issues)
-  const rawPositionAgeDays = createdTimestamp
-    ? (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24)
-    : 30; // Default to 30 days if no history
+  // Also validate the timestamp is not in the future or too close to now
+  const now = Date.now();
+  const validTimestamp = createdTimestamp && createdTimestamp > 0 && createdTimestamp < now
+    ? createdTimestamp
+    : null;
+  const rawPositionAgeDays = validTimestamp
+    ? (now - validTimestamp) / (1000 * 60 * 60 * 24)
+    : 30; // Default to 30 days if no valid history
+
+  // Ensure minimum 1 day for APR calculation - this prevents inflated APR for new positions
   const positionAgeDays = Math.max(1, rawPositionAgeDays);
 
   // APR = (earnings / days) * 365 / original investment * 100
-  const apr = ((earnings / positionAgeDays) * 365 / safeOriginalInvestment) * 100;
+  // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
+  const rawApr = ((earnings / positionAgeDays) * 365 / safeOriginalInvestment) * 100;
+  const apr = Math.min(rawApr, 10000); // Cap at 10,000% APR
 
   // Format opened date from position history
   const openedDate = createdTimestamp
