@@ -159,36 +159,45 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
 
   // Get historical data from position history (if available)
   // Use V4 history for V4 positions, V3 history for V3 positions
-  let depositsUSD = totalValueUSD; // Default fallback
+  let originalInvestmentUSD = totalValueUSD; // Historical USD value at deposit time (for P&L)
+  let depositsAtCurrentPrices = totalValueUSD; // Deposits valued at current prices (for HODL calc)
   let claimedFeesUSD = 0;
 
   if (isV4 && v4PositionHistory) {
     // V4: Use ModifyLiquidity events for deposits and claims
     const hasDepositData = v4PositionHistory.depositedToken0 > 0 || v4PositionHistory.depositedToken1 > 0;
     if (hasDepositData) {
-      depositsUSD = (v4PositionHistory.depositedToken0 * token0Price) + (v4PositionHistory.depositedToken1 * token1Price);
+      // Use historical USD value if available, otherwise calculate from current prices
+      originalInvestmentUSD = v4PositionHistory.depositedUSD > 0
+        ? v4PositionHistory.depositedUSD
+        : (v4PositionHistory.depositedToken0 * token0Price) + (v4PositionHistory.depositedToken1 * token1Price);
+      depositsAtCurrentPrices = (v4PositionHistory.depositedToken0 * token0Price) + (v4PositionHistory.depositedToken1 * token1Price);
       claimedFeesUSD = (v4PositionHistory.claimedToken0 * token0Price) + (v4PositionHistory.claimedToken1 * token1Price);
     }
   } else if (!isV4 && positionHistory) {
     // V3: Use The Graph subgraph data
-    depositsUSD = (positionHistory.depositedToken0 * token0Price) + (positionHistory.depositedToken1 * token1Price);
+    // Use historical USD value if available, otherwise calculate from current prices
+    originalInvestmentUSD = positionHistory.depositedUSD > 0
+      ? positionHistory.depositedUSD
+      : (positionHistory.depositedToken0 * token0Price) + (positionHistory.depositedToken1 * token1Price);
+    depositsAtCurrentPrices = (positionHistory.depositedToken0 * token0Price) + (positionHistory.depositedToken1 * token1Price);
     claimedFeesUSD = (positionHistory.claimedFees0 * token0Price) + (positionHistory.claimedFees1 * token1Price);
   }
 
-  // Total earnings = unclaimed + claimed
+  // Total earnings = unclaimed + claimed fees
   const earnings = unclaimedFeesUSD + claimedFeesUSD;
 
-  // Asset gain = current value - deposits
-  const assetGain = totalValueUSD - depositsUSD;
+  // Profit/Loss = Total Current Value (position + fees) - Original Investment
+  // This is the actual capital gain/loss
+  const currentTotalValue = totalValueUSD + unclaimedFeesUSD + claimedFeesUSD;
+  const profitLoss = currentTotalValue - originalInvestmentUSD;
 
-  // Profit/Loss = Asset Gain + Earnings
-  const profitLoss = assetGain + earnings;
-
-  // HODL value = deposits at current prices (same as depositsUSD since we're using current prices)
-  const hodlValue = depositsUSD;
-  // Impermanent Loss = HODL value - Current value
+  // HODL value = original deposits valued at current prices
+  const hodlValue = depositsAtCurrentPrices;
+  // Impermanent Loss = HODL value - Current position value (not including fees)
   const impermanentLoss = hodlValue - totalValueUSD;
-  // VS HODL = Earnings - Impermanent Loss
+  // VS HODL = How much better/worse LP is vs just holding
+  // VS HODL = (Current Position + Fees) - HODL Value = Earnings - IL
   const vsHodl = earnings - Math.max(0, impermanentLoss);
 
   // Get creation timestamp from the appropriate history source
@@ -201,9 +210,9 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
     ? (Date.now() - createdTimestamp) / (1000 * 60 * 60 * 24)
     : 30; // Default to 30 days if no history
 
-  // APR = (daily earnings * 365 / deposits) * 100
+  // APR = (earnings / days) * 365 / original investment * 100
   const dailyEarnings = positionAgeDays > 0 ? earnings / positionAgeDays : 0;
-  const apr = depositsUSD > 0 ? ((dailyEarnings * 365) / depositsUSD) * 100 : 0;
+  const apr = originalInvestmentUSD > 0 ? ((dailyEarnings * 365) / originalInvestmentUSD) * 100 : 0;
 
   // Format opened date from position history
   const openedDate = createdTimestamp

@@ -34,6 +34,8 @@ export interface V4PositionHistory {
   // Deposit amounts (from ModifyLiquidity events)
   depositedToken0: number;
   depositedToken1: number;
+  // Original USD value at time of deposit (for P&L calculation)
+  depositedUSD: number;
   // Claimed/withdrawn amounts (negative ModifyLiquidity = withdrawals including fees)
   claimedToken0: number;
   claimedToken1: number;
@@ -310,6 +312,7 @@ export async function fetchV4PositionHistory(
           mintTxHash: firstTransfer.hash,
           depositedToken0: 0,
           depositedToken1: 0,
+          depositedUSD: 0,
           claimedToken0: 0,
           claimedToken1: 0,
           tickLower: 0,
@@ -328,6 +331,7 @@ export async function fetchV4PositionHistory(
       mintTxHash: mintTx.hash,
       depositedToken0: 0,
       depositedToken1: 0,
+      depositedUSD: 0,
       claimedToken0: 0,
       claimedToken1: 0,
       tickLower: 0,
@@ -385,9 +389,10 @@ function calculateDepositsAndClaims(
   events: ModifyLiquidityEvent[],
   tickLower: number,
   tickUpper: number
-): { depositedToken0: number; depositedToken1: number; claimedToken0: number; claimedToken1: number } {
+): { depositedToken0: number; depositedToken1: number; depositedUSD: number; claimedToken0: number; claimedToken1: number } {
   let depositedToken0 = 0;
   let depositedToken1 = 0;
+  let depositedUSD = 0;
   let claimedToken0 = 0;
   let claimedToken1 = 0;
 
@@ -399,21 +404,22 @@ function calculateDepositsAndClaims(
   for (const event of matchingEvents) {
     const amount0 = parseFloat(event.amount0);
     const amount1 = parseFloat(event.amount1);
+    const amountUSD = parseFloat(event.amountUSD || '0') || 0;
 
-    if (amount0 > 0) {
-      depositedToken0 += amount0;
+    // Positive amounts = deposits, negative = withdrawals
+    if (amount0 > 0 || amount1 > 0) {
+      // This is a deposit event
+      depositedToken0 += Math.max(0, amount0);
+      depositedToken1 += Math.max(0, amount1);
+      depositedUSD += Math.abs(amountUSD); // Track USD value at deposit time
     } else {
+      // This is a withdrawal/claim event
       claimedToken0 += Math.abs(amount0);
-    }
-
-    if (amount1 > 0) {
-      depositedToken1 += amount1;
-    } else {
       claimedToken1 += Math.abs(amount1);
     }
   }
 
-  return { depositedToken0, depositedToken1, claimedToken0, claimedToken1 };
+  return { depositedToken0, depositedToken1, depositedUSD, claimedToken0, claimedToken1 };
 }
 
 // Batch fetch V4 position histories with deposits and claims
@@ -469,6 +475,7 @@ export async function fetchV4PositionsHistory(
       // Default values
       let depositedToken0 = 0;
       let depositedToken1 = 0;
+      let depositedUSD = 0;
       let claimedToken0 = 0;
       let claimedToken1 = 0;
       let tickLower = 0;
@@ -481,10 +488,11 @@ export async function fetchV4PositionsHistory(
         const calculated = calculateDepositsAndClaims(modifyEvents, tickLower, tickUpper);
         depositedToken0 = calculated.depositedToken0;
         depositedToken1 = calculated.depositedToken1;
+        depositedUSD = calculated.depositedUSD;
         claimedToken0 = calculated.claimedToken0;
         claimedToken1 = calculated.claimedToken1;
 
-        console.log(`V4 Position ${tokenId} (ticks ${tickLower}-${tickUpper}): deposits=${depositedToken0}/${depositedToken1}, claims=${claimedToken0}/${claimedToken1}`);
+        console.log(`V4 Position ${tokenId} (ticks ${tickLower}-${tickUpper}): deposits=${depositedToken0}/${depositedToken1} ($${depositedUSD}), claims=${claimedToken0}/${claimedToken1}`);
       }
 
       results.set(tokenId, {
@@ -494,6 +502,7 @@ export async function fetchV4PositionsHistory(
         mintTxHash: mint?.hash || '',
         depositedToken0,
         depositedToken1,
+        depositedUSD,
         claimedToken0,
         claimedToken1,
         tickLower,

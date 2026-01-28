@@ -107,14 +107,14 @@ export default function TrackPage() {
   // Calculate wallet positions value and fees (V3 + V4)
   const walletPositionsTotals = useMemo(() => {
     let totalValue = 0;
-    let totalDeposits = 0;
+    let totalOriginalInvestment = 0; // Historical USD value at deposit time (for P&L)
     let totalUnclaimedFees = 0;
     let totalClaimedFees = 0;
     let v3Count = 0;
     let v4Count = 0;
     let oldestPositionTimestamp = Date.now();
     let totalPositionAgeDays = 0;
-    let totalHodlValue = 0; // Value if just holding original deposits
+    let totalHodlValue = 0; // Deposits valued at current prices (for HODL/IL calc)
 
     walletPositions.forEach(pos => {
       const token0Symbol = pos.token0Symbol || 'ETH';
@@ -140,25 +140,30 @@ export default function TrackPage() {
       const uncollectedFees1 = pos.uncollectedFees1 || 0;
       totalUnclaimedFees += (uncollectedFees0 * token0Price) + (uncollectedFees1 * token1Price);
 
-      // Get historical data - use V3 subgraph for V3, Etherscan for V4
+      // Get historical data - use V3 subgraph for V3, V4 subgraph for V4
       const isV4 = pos.version === 'v4';
       const v3History = positionHistories.get(pos.tokenId.toString());
       const v4History = v4PositionHistories.get(pos.tokenId.toString());
 
       if (isV4 && v4History) {
         // V4 position with history from V4 subgraph (ModifyLiquidity events)
-        // Use deposited amounts from ModifyLiquidity events
         const hasDepositData = v4History.depositedToken0 > 0 || v4History.depositedToken1 > 0;
         if (hasDepositData) {
-          const depositsUSD = (v4History.depositedToken0 * token0Price) + (v4History.depositedToken1 * token1Price);
-          totalDeposits += depositsUSD;
-          totalHodlValue += depositsUSD;
+          // Use historical USD value if available, otherwise calculate from current prices
+          const originalInvestment = v4History.depositedUSD > 0
+            ? v4History.depositedUSD
+            : (v4History.depositedToken0 * token0Price) + (v4History.depositedToken1 * token1Price);
+          totalOriginalInvestment += originalInvestment;
+
+          // HODL value = deposits at current prices
+          const depositsAtCurrentPrices = (v4History.depositedToken0 * token0Price) + (v4History.depositedToken1 * token1Price);
+          totalHodlValue += depositsAtCurrentPrices;
 
           // Add claimed fees from V4 subgraph
           totalClaimedFees += (v4History.claimedToken0 * token0Price) + (v4History.claimedToken1 * token1Price);
         } else {
           // Fallback to current value if no deposit data
-          totalDeposits += positionValue;
+          totalOriginalInvestment += positionValue;
           totalHodlValue += positionValue;
         }
 
@@ -170,12 +175,15 @@ export default function TrackPage() {
         totalPositionAgeDays += positionAgeDays;
       } else if (!isV4 && v3History) {
         // V3 position with history from The Graph
-        // Calculate deposits in USD (original deposit amounts at current prices)
-        const depositsUSD = (v3History.depositedToken0 * token0Price) + (v3History.depositedToken1 * token1Price);
-        totalDeposits += depositsUSD;
+        // Use historical USD value if available, otherwise calculate from current prices
+        const originalInvestment = v3History.depositedUSD > 0
+          ? v3History.depositedUSD
+          : (v3History.depositedToken0 * token0Price) + (v3History.depositedToken1 * token1Price);
+        totalOriginalInvestment += originalInvestment;
 
-        // Calculate HODL value (what you'd have if you just held the original tokens)
-        totalHodlValue += depositsUSD;
+        // HODL value = deposits at current prices
+        const depositsAtCurrentPrices = (v3History.depositedToken0 * token0Price) + (v3History.depositedToken1 * token1Price);
+        totalHodlValue += depositsAtCurrentPrices;
 
         // Claimed fees
         totalClaimedFees += (v3History.claimedFees0 * token0Price) + (v3History.claimedFees1 * token1Price);
@@ -188,7 +196,7 @@ export default function TrackPage() {
         totalPositionAgeDays += positionAgeDays;
       } else {
         // No history available - estimate deposits as current value
-        totalDeposits += positionValue;
+        totalOriginalInvestment += positionValue;
         totalHodlValue += positionValue;
       }
     });
@@ -199,7 +207,7 @@ export default function TrackPage() {
 
     return {
       totalValue,
-      totalDeposits,
+      totalOriginalInvestment,
       totalUnclaimedFees,
       totalClaimedFees,
       totalHodlValue,
@@ -217,7 +225,7 @@ export default function TrackPage() {
 
   // Combined totals
   const totalValue = walletPositionsTotals.totalValue + manualTotalValue;
-  const totalDeposits = walletPositionsTotals.totalDeposits + manualTotalDeposits;
+  const totalOriginalInvestment = walletPositionsTotals.totalOriginalInvestment + manualTotalDeposits;
   const totalHodlValue = walletPositionsTotals.totalHodlValue + manualTotalDeposits;
 
   // Earnings breakdown with real claimed fees from The Graph
@@ -228,30 +236,28 @@ export default function TrackPage() {
   // Retention rate: percentage of earnings that are still unclaimed
   const retentionRate = totalEarnings > 0 ? ((unclaimedFees / totalEarnings) * 100) : 0;
 
-  // Asset Gain: difference between current value and deposits (price appreciation/depreciation)
-  const assetGain = totalValue - totalDeposits;
+  // Profit/Loss = Total Current Value (position + all fees) - Original Investment
+  // This is the actual capital gain/loss
+  const totalCurrentValue = totalValue + totalEarnings;
+  const profitLoss = totalCurrentValue - totalOriginalInvestment;
 
-  // Profit/Loss: Total gains = Asset Gain + Earnings (fees collected + unclaimed)
-  const profitLoss = assetGain + totalEarnings;
+  // Asset Gain = Position Value Change (not including fees)
+  const assetGain = totalValue - totalOriginalInvestment;
 
   // VS HODL: How much better/worse LP is compared to just holding
-  // LP Value = Current Position Value + Claimed Fees
-  // HODL Value = Original deposits at current prices
-  // VS HODL = (LP Value) - (HODL Value) = (totalValue + claimedFees) - totalHodlValue
-  // Simplified: VS HODL = Earnings - Impermanent Loss
-  // Impermanent Loss = HODL Value - Current Position Value = totalHodlValue - totalValue
+  // HODL Value = Original deposits valued at current prices
+  // Impermanent Loss = HODL Value - Current Position Value (not including fees)
   const impermanentLoss = totalHodlValue - totalValue;
+  // VS HODL = Earnings - Impermanent Loss
   const vsHodl = totalEarnings - Math.max(0, impermanentLoss);
 
   // ROI: Total profit relative to initial investment
-  const roi = totalDeposits > 0 ? (profitLoss / totalDeposits) * 100 : 0;
+  const roi = totalOriginalInvestment > 0 ? (profitLoss / totalOriginalInvestment) * 100 : 0;
 
-  // APR calculation using actual position age
+  // APR calculation: (earnings / days) * 365 / original investment
   const avgPositionAgeDays = walletPositionsTotals.avgPositionAgeDays || 30;
-  // Calculate daily yield based on actual position age (use total earnings / days active)
   const actualDailyYield = avgPositionAgeDays > 0 ? totalEarnings / avgPositionAgeDays : 0;
-  // APR = (daily yield * 365 / deposits) * 100
-  const apr = totalDeposits > 0 ? ((actualDailyYield * 365) / totalDeposits) * 100 : 0;
+  const apr = totalOriginalInvestment > 0 ? ((actualDailyYield * 365) / totalOriginalInvestment) * 100 : 0;
 
   // Projections based on actual daily yield
   const projection24h = actualDailyYield;
@@ -422,7 +428,7 @@ export default function TrackPage() {
             <div className="flex gap-6 mt-3 text-xs">
               <div>
                 <p className="text-muted">Deposits</p>
-                <p className="font-medium">{formatCurrency(totalDeposits)}</p>
+                <p className="font-medium">{formatCurrency(totalOriginalInvestment)}</p>
               </div>
               <div>
                 <p className="text-muted">Withdrawals</p>

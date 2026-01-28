@@ -23,6 +23,8 @@ export interface PositionHistory {
   // Deposit amounts (in token units, not USD)
   depositedToken0: number;
   depositedToken1: number;
+  // Original USD value at time of deposit (for P&L calculation)
+  depositedUSD: number;
   // Claimed fees (already collected)
   claimedFees0: number;
   claimedFees1: number;
@@ -65,7 +67,7 @@ const POSITION_HISTORY_QUERY = `
   }
 `;
 
-// Query to get multiple positions at once
+// Query to get multiple positions at once with mint USD values
 const POSITIONS_BY_IDS_QUERY = `
   query GetPositionsByIds($tokenIds: [String!]!) {
     positions(where: { id_in: $tokenIds }) {
@@ -91,6 +93,22 @@ const POSITIONS_BY_IDS_QUERY = `
         timestamp
         blockNumber
       }
+    }
+  }
+`;
+
+// Query to get mint events for positions (to get historical USD values)
+const MINTS_BY_POSITION_QUERY = `
+  query GetMintsByPosition($tokenIds: [String!]!) {
+    mints(where: { position_in: $tokenIds }, orderBy: timestamp, orderDirection: asc) {
+      id
+      position {
+        id
+      }
+      amount0
+      amount1
+      amountUSD
+      timestamp
     }
   }
 `;
@@ -143,6 +161,7 @@ export async function fetchPositionHistory(
       createdBlockNumber: parseInt(position.transaction.blockNumber),
       depositedToken0: parseFloat(position.depositedToken0) || 0,
       depositedToken1: parseFloat(position.depositedToken1) || 0,
+      depositedUSD: 0, // Single fetch doesn't include mint USD - use batch fetch for this
       claimedFees0: parseFloat(position.collectedFeesToken0) || 0,
       claimedFees1: parseFloat(position.collectedFeesToken1) || 0,
       totalCollects: 0, // Could count collect events if needed
@@ -173,31 +192,58 @@ export async function fetchPositionsHistory(
   }
 
   try {
-    const response = await fetch(subgraphUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: POSITIONS_BY_IDS_QUERY,
-        variables: { tokenIds: tokenIds.map(id => id.toString()) },
+    // Fetch positions and mints in parallel
+    const [positionsResponse, mintsResponse] = await Promise.all([
+      fetch(subgraphUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: POSITIONS_BY_IDS_QUERY,
+          variables: { tokenIds: tokenIds.map(id => id.toString()) },
+        }),
       }),
-    });
+      fetch(subgraphUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: MINTS_BY_POSITION_QUERY,
+          variables: { tokenIds: tokenIds.map(id => id.toString()) },
+        }),
+      }),
+    ]);
 
-    const data = await response.json();
+    const positionsData = await positionsResponse.json();
+    const mintsData = await mintsResponse.json();
 
-    if (data.errors) {
-      console.warn('Positions history query failed:', data.errors[0]?.message);
+    if (positionsData.errors) {
+      console.warn('Positions history query failed:', positionsData.errors[0]?.message);
       return results;
     }
 
-    const positions = data.data?.positions || [];
+    const positions = positionsData.data?.positions || [];
+    const mints = mintsData.data?.mints || [];
+
+    // Calculate total deposited USD per position from mint events
+    const depositedUSDByPosition = new Map<string, number>();
+    for (const mint of mints) {
+      const positionId = mint.position?.id;
+      if (positionId) {
+        const currentTotal = depositedUSDByPosition.get(positionId) || 0;
+        const mintUSD = parseFloat(mint.amountUSD) || 0;
+        depositedUSDByPosition.set(positionId, currentTotal + mintUSD);
+      }
+    }
 
     for (const position of positions) {
+      const depositedUSD = depositedUSDByPosition.get(position.id) || 0;
+
       results.set(position.id, {
         tokenId: position.id,
         createdTimestamp: parseInt(position.transaction.timestamp) * 1000,
         createdBlockNumber: parseInt(position.transaction.blockNumber),
         depositedToken0: parseFloat(position.depositedToken0) || 0,
         depositedToken1: parseFloat(position.depositedToken1) || 0,
+        depositedUSD: depositedUSD,
         claimedFees0: parseFloat(position.collectedFeesToken0) || 0,
         claimedFees1: parseFloat(position.collectedFeesToken1) || 0,
         totalCollects: 0,
