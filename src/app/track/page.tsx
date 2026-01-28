@@ -233,14 +233,19 @@ export default function TrackPage() {
         totalPositionAgeDays += positionAgeDays;
       } else {
         // No history available - estimate deposits as current value
-        totalOriginalInvestment += positionValue;
-        totalHodlValue += positionValue;
+        totalOriginalInvestment += positionValue > 0 ? positionValue : 0;
+        totalHodlValue += positionValue > 0 ? positionValue : 0;
+        // Default to 30 days if no history available
+        totalPositionAgeDays += 30;
       }
     });
 
-    const avgPositionAgeDays = walletPositions.length > 0 && totalPositionAgeDays > 0
+    // Calculate average position age with minimum 1 day floor
+    const rawAvgPositionAgeDays = walletPositions.length > 0 && totalPositionAgeDays > 0
       ? totalPositionAgeDays / walletPositions.length
       : 30;
+    // Ensure minimum 1 day to prevent APR inflation
+    const avgPositionAgeDays = Math.max(1, rawAvgPositionAgeDays);
 
     return {
       totalValue,
@@ -295,14 +300,22 @@ export default function TrackPage() {
   const roi = safeOriginalInvestment > 0 ? (profitLoss / safeOriginalInvestment) * 100 : 0;
 
   // APR calculation: (earnings / days) * 365 / original investment
-  // Minimum 1 day to avoid division issues
+  // Ensure minimum 1 day to avoid division issues - double check here
   const avgPositionAgeDays = Math.max(1, walletPositionsTotals.avgPositionAgeDays || 30);
-  const rawApr = ((totalEarnings / avgPositionAgeDays) * 365 / safeOriginalInvestment) * 100;
-  // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
-  const apr = Math.min(rawApr, 10000);
 
-  // Daily yield for projections
-  const actualDailyYield = totalEarnings / avgPositionAgeDays;
+  // Validate all values before calculation to prevent NaN/Infinity
+  const safeEarnings = Number.isFinite(totalEarnings) && totalEarnings >= 0 ? totalEarnings : 0;
+  const safeDays = Number.isFinite(avgPositionAgeDays) && avgPositionAgeDays >= 1 ? avgPositionAgeDays : 30;
+  const safeInvestment = Number.isFinite(safeOriginalInvestment) && safeOriginalInvestment > 0 ? safeOriginalInvestment : 1;
+
+  const rawApr = ((safeEarnings / safeDays) * 365 / safeInvestment) * 100;
+  // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values
+  const apr = Math.min(Number.isFinite(rawApr) ? rawApr : 0, 10000);
+
+  // Daily yield for projections - cap at reasonable maximum (1% of investment per day = 365% APR)
+  const maxDailyYield = safeInvestment * 0.01; // 1% per day max
+  const rawDailyYield = safeEarnings / safeDays;
+  const actualDailyYield = Math.min(Number.isFinite(rawDailyYield) ? rawDailyYield : 0, maxDailyYield);
 
   // Debug logging
   console.log('Portfolio APR Debug:', {

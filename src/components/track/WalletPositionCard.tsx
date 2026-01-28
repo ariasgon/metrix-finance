@@ -234,10 +234,15 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
   // Ensure minimum 1 day for APR calculation - this prevents inflated APR for new positions
   const positionAgeDays = Math.max(1, rawPositionAgeDays);
 
+  // Validate all values before APR calculation to prevent NaN/Infinity
+  const safeEarnings = Number.isFinite(earnings) && earnings >= 0 ? earnings : 0;
+  const safeDays = Number.isFinite(positionAgeDays) && positionAgeDays >= 1 ? positionAgeDays : 30;
+  const safeInvestment = Number.isFinite(safeOriginalInvestment) && safeOriginalInvestment > 0 ? safeOriginalInvestment : 1;
+
   // APR = (earnings / days) * 365 / original investment * 100
   // Cap APR at reasonable maximum (10,000%) to prevent display of absurd values from edge cases
-  const rawApr = ((earnings / positionAgeDays) * 365 / safeOriginalInvestment) * 100;
-  const apr = Math.min(rawApr, 10000); // Cap at 10,000% APR
+  const rawApr = ((safeEarnings / safeDays) * 365 / safeInvestment) * 100;
+  const apr = Math.min(Number.isFinite(rawApr) ? rawApr : 0, 10000); // Cap at 10,000% APR
 
   // Format opened date from position history
   const openedDate = createdTimestamp
