@@ -167,21 +167,28 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
     // V4: Use ModifyLiquidity events for deposits and claims
     const hasDepositData = v4PositionHistory.depositedToken0 > 0 || v4PositionHistory.depositedToken1 > 0;
     if (hasDepositData) {
-      // Use historical USD value if available, otherwise calculate from current prices
-      originalInvestmentUSD = v4PositionHistory.depositedUSD > 0
-        ? v4PositionHistory.depositedUSD
-        : (v4PositionHistory.depositedToken0 * token0Price) + (v4PositionHistory.depositedToken1 * token1Price);
       depositsAtCurrentPrices = (v4PositionHistory.depositedToken0 * token0Price) + (v4PositionHistory.depositedToken1 * token1Price);
       claimedFeesUSD = (v4PositionHistory.claimedToken0 * token0Price) + (v4PositionHistory.claimedToken1 * token1Price);
+      // Use historical USD value if available, otherwise use deposits at current prices
+      originalInvestmentUSD = v4PositionHistory.depositedUSD > 0
+        ? v4PositionHistory.depositedUSD
+        : depositsAtCurrentPrices;
     }
   } else if (!isV4 && positionHistory) {
     // V3: Use The Graph subgraph data
-    // Use historical USD value if available, otherwise calculate from current prices
-    originalInvestmentUSD = positionHistory.depositedUSD > 0
-      ? positionHistory.depositedUSD
-      : (positionHistory.depositedToken0 * token0Price) + (positionHistory.depositedToken1 * token1Price);
     depositsAtCurrentPrices = (positionHistory.depositedToken0 * token0Price) + (positionHistory.depositedToken1 * token1Price);
     claimedFeesUSD = (positionHistory.claimedFees0 * token0Price) + (positionHistory.claimedFees1 * token1Price);
+    // Use historical USD value if available, otherwise use deposits at current prices
+    originalInvestmentUSD = positionHistory.depositedUSD > 0
+      ? positionHistory.depositedUSD
+      : depositsAtCurrentPrices;
+  }
+
+  // Safety check: if originalInvestmentUSD is 0 or unreasonably small, use current value as fallback
+  // This prevents division by near-zero which causes astronomical APR/P&L values
+  if (originalInvestmentUSD < 1) {
+    originalInvestmentUSD = totalValueUSD > 0 ? totalValueUSD : 1;
+    depositsAtCurrentPrices = originalInvestmentUSD;
   }
 
   // Total earnings = unclaimed + claimed fees

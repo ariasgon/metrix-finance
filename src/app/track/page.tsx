@@ -149,15 +149,21 @@ export default function TrackPage() {
         // V4 position with history from V4 subgraph (ModifyLiquidity events)
         const hasDepositData = v4History.depositedToken0 > 0 || v4History.depositedToken1 > 0;
         if (hasDepositData) {
-          // Use historical USD value if available, otherwise calculate from current prices
-          const originalInvestment = v4History.depositedUSD > 0
-            ? v4History.depositedUSD
-            : (v4History.depositedToken0 * token0Price) + (v4History.depositedToken1 * token1Price);
-          totalOriginalInvestment += originalInvestment;
-
           // HODL value = deposits at current prices
           const depositsAtCurrentPrices = (v4History.depositedToken0 * token0Price) + (v4History.depositedToken1 * token1Price);
-          totalHodlValue += depositsAtCurrentPrices;
+
+          // Use historical USD value if available, otherwise use deposits at current prices
+          let originalInvestment = v4History.depositedUSD > 0
+            ? v4History.depositedUSD
+            : depositsAtCurrentPrices;
+
+          // Safety: if calculated value is too small, use current position value
+          if (originalInvestment < 1) {
+            originalInvestment = positionValue > 0 ? positionValue : 1;
+          }
+
+          totalOriginalInvestment += originalInvestment;
+          totalHodlValue += depositsAtCurrentPrices > 0 ? depositsAtCurrentPrices : positionValue;
 
           // Add claimed fees from V4 subgraph
           totalClaimedFees += (v4History.claimedToken0 * token0Price) + (v4History.claimedToken1 * token1Price);
@@ -175,15 +181,21 @@ export default function TrackPage() {
         totalPositionAgeDays += positionAgeDays;
       } else if (!isV4 && v3History) {
         // V3 position with history from The Graph
-        // Use historical USD value if available, otherwise calculate from current prices
-        const originalInvestment = v3History.depositedUSD > 0
-          ? v3History.depositedUSD
-          : (v3History.depositedToken0 * token0Price) + (v3History.depositedToken1 * token1Price);
-        totalOriginalInvestment += originalInvestment;
-
         // HODL value = deposits at current prices
         const depositsAtCurrentPrices = (v3History.depositedToken0 * token0Price) + (v3History.depositedToken1 * token1Price);
-        totalHodlValue += depositsAtCurrentPrices;
+
+        // Use historical USD value if available, otherwise use deposits at current prices
+        let originalInvestment = v3History.depositedUSD > 0
+          ? v3History.depositedUSD
+          : depositsAtCurrentPrices;
+
+        // Safety: if calculated value is too small, use current position value
+        if (originalInvestment < 1) {
+          originalInvestment = positionValue > 0 ? positionValue : 1;
+        }
+
+        totalOriginalInvestment += originalInvestment;
+        totalHodlValue += depositsAtCurrentPrices > 0 ? depositsAtCurrentPrices : positionValue;
 
         // Claimed fees
         totalClaimedFees += (v3History.claimedFees0 * token0Price) + (v3History.claimedFees1 * token1Price);
