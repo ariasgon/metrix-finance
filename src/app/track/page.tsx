@@ -267,18 +267,29 @@ export default function TrackPage() {
   // VS HODL = Earnings - Impermanent Loss
   const vsHodl = totalEarnings - Math.max(0, impermanentLoss);
 
+  // Use the HIGHER of calculated investment OR current value for safe APR calculation
+  const safeOriginalInvestment = Math.max(totalOriginalInvestment, totalValue, 1);
+
   // ROI: Total profit relative to initial investment
-  const roi = totalOriginalInvestment > 0 ? (profitLoss / totalOriginalInvestment) * 100 : 0;
+  const roi = safeOriginalInvestment > 0 ? (profitLoss / safeOriginalInvestment) * 100 : 0;
 
   // APR calculation: (earnings / days) * 365 / original investment
   // Minimum 1 day to avoid division issues
   const avgPositionAgeDays = Math.max(1, walletPositionsTotals.avgPositionAgeDays || 30);
-  const apr = totalOriginalInvestment > 0
-    ? ((totalEarnings / avgPositionAgeDays) * 365 / totalOriginalInvestment) * 100
-    : 0;
+  const apr = ((totalEarnings / avgPositionAgeDays) * 365 / safeOriginalInvestment) * 100;
 
   // Daily yield for projections
   const actualDailyYield = totalEarnings / avgPositionAgeDays;
+
+  // Debug logging
+  console.log('Portfolio APR Debug:', {
+    totalValue,
+    totalOriginalInvestment,
+    safeOriginalInvestment,
+    totalEarnings,
+    avgPositionAgeDays,
+    apr,
+  });
 
   // Projections based on actual daily yield
   const projection24h = actualDailyYield;

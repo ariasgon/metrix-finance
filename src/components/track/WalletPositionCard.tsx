@@ -184,22 +184,29 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
       : depositsAtCurrentPrices;
   }
 
-  // Safety check: ensure originalInvestmentUSD is reasonable
-  // If it's less than $1 OR much smaller than current value (likely bad data), use current value
-  // A position's original investment shouldn't be less than 10% of current value in most cases
-  const minReasonableInvestment = Math.max(1, totalValueUSD * 0.1);
-  if (originalInvestmentUSD < minReasonableInvestment) {
-    originalInvestmentUSD = totalValueUSD > 0 ? totalValueUSD : 1;
-    depositsAtCurrentPrices = originalInvestmentUSD;
-  }
-
   // Total earnings = unclaimed + claimed fees
   const earnings = unclaimedFeesUSD + claimedFeesUSD;
+
+  // Safety check: ensure originalInvestmentUSD is reasonable for APR calculation
+  // Use the HIGHER of: calculated investment OR current position value
+  // This ensures APR is never artificially inflated by bad subgraph data
+  const safeOriginalInvestment = Math.max(originalInvestmentUSD, totalValueUSD, 1);
+
+  // Debug logging (remove in production)
+  console.log('APR Debug:', {
+    tokenId: position.tokenId.toString(),
+    totalValueUSD,
+    originalInvestmentUSD,
+    safeOriginalInvestment,
+    earnings,
+    unclaimedFeesUSD,
+    claimedFeesUSD,
+  });
 
   // Profit/Loss = Total Current Value (position + fees) - Original Investment
   // This is the actual capital gain/loss
   const currentTotalValue = totalValueUSD + unclaimedFeesUSD + claimedFeesUSD;
-  const profitLoss = currentTotalValue - originalInvestmentUSD;
+  const profitLoss = currentTotalValue - safeOriginalInvestment;
 
   // HODL value = original deposits valued at current prices
   const hodlValue = depositsAtCurrentPrices;
@@ -221,9 +228,7 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
   const positionAgeDays = Math.max(1, rawPositionAgeDays);
 
   // APR = (earnings / days) * 365 / original investment * 100
-  const apr = originalInvestmentUSD > 0
-    ? ((earnings / positionAgeDays) * 365 / originalInvestmentUSD) * 100
-    : 0;
+  const apr = ((earnings / positionAgeDays) * 365 / safeOriginalInvestment) * 100;
 
   // Format opened date from position history
   const openedDate = createdTimestamp
