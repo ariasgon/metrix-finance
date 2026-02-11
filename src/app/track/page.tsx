@@ -11,6 +11,7 @@ import { WalletPositionCard } from '@/components/track/WalletPositionCard';
 import { V4PositionLookup } from '@/components/track/V4PositionLookup';
 import { useStore } from '@/lib/store';
 import { usePositions } from '@/hooks/usePositions';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Position } from '@/types';
 import { Plus, Wallet, TrendingUp, DollarSign, PieChart, RefreshCw, Link2, Search, ChevronDown, Calendar, Bell, X } from 'lucide-react';
 import { formatCurrency, formatPercent } from '@/lib/utils';
@@ -19,6 +20,7 @@ import { fetchPositionsHistory, PositionHistory } from '@/lib/uniswap-subgraph';
 import { fetchV4PositionsHistory, V4PositionHistory } from '@/lib/v4-subgraph';
 
 export default function TrackPage() {
+  const t = useTranslation();
   const { address, isConnected } = useAccount();
   const { positions: walletPositions, isLoading: isLoadingWallet, refetch, positionCount } = usePositions();
   const { trackedPositions, addTrackedPosition, removeTrackedPosition } = useStore();
@@ -382,9 +384,9 @@ export default function TrackPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Track</h1>
+          <h1 className="text-2xl font-bold">{t('track')}</h1>
           <p className="text-muted mt-1">
-            Track your position returns in one place
+            {t('trackSubtitle')}
           </p>
         </div>
         <div className="flex items-center gap-3">

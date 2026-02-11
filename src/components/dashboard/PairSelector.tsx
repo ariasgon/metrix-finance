@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, X } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { TokenIcon } from '@/components/ui/TokenIcon';
 import { POPULAR_TOKENS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -92,16 +93,6 @@ function TokenSelect({ value, onChange, excludeToken, placeholder }: TokenSelect
         token.name.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const tokenColors: Record<string, string> = {
-    ETH: '#627eea',
-    USDC: '#2775ca',
-    USDT: '#26a17b',
-    WBTC: '#f7931a',
-    DAI: '#f5ac37',
-    LINK: '#2a5ada',
-    UNI: '#ff007a',
-  };
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -114,12 +105,7 @@ function TokenSelect({ value, onChange, excludeToken, placeholder }: TokenSelect
       >
         {value ? (
           <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-              style={{ backgroundColor: tokenColors[value.symbol] || '#6366f1' }}
-            >
-              {value.symbol.charAt(0)}
-            </div>
+            <TokenIcon symbol={value.symbol} size="sm" />
             <span className="font-medium">{value.symbol}</span>
           </div>
         ) : (
@@ -161,12 +147,7 @@ function TokenSelect({ value, onChange, excludeToken, placeholder }: TokenSelect
                     value?.address === token.address && 'bg-primary/10'
                   )}
                 >
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                    style={{ backgroundColor: tokenColors[token.symbol] || '#6366f1' }}
-                  >
-                    {token.symbol.charAt(0)}
-                  </div>
+                  <TokenIcon symbol={token.symbol} size="md" />
                   <div>
                     <span className="font-medium">{token.symbol}</span>
                     <span className="text-xs text-muted block">{token.name}</span>

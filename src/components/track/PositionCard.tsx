@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { TokenPairIcon } from '@/components/ui/TokenIcon';
 import { Position } from '@/types';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
 import { TrendingUp, TrendingDown, Trash2, ExternalLink, MoreVertical } from 'lucide-react';
@@ -15,42 +16,22 @@ export function PositionCard({ position, onRemove }: PositionCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const isProfit = position.pnl > 0;
 
-  const tokenColors: Record<string, string> = {
-    ETH: '#627eea',
-    WETH: '#627eea',
-    USDC: '#2775ca',
-    USDT: '#26a17b',
-    WBTC: '#f7931a',
-    DAI: '#f5ac37',
-    LINK: '#2a5ada',
-    UNI: '#ff007a',
-  };
-
   return (
     <Card className="p-4 hover:bg-card-hover transition-colors">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-card"
-              style={{ backgroundColor: tokenColors[position.pool.token0.symbol] || '#6366f1' }}
-            >
-              {position.pool.token0.symbol.charAt(0)}
-            </div>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-card"
-              style={{ backgroundColor: tokenColors[position.pool.token1.symbol] || '#6366f1' }}
-            >
-              {position.pool.token1.symbol.charAt(0)}
-            </div>
-          </div>
+          <TokenPairIcon
+            token0Symbol={position.pool.token0.symbol}
+            token1Symbol={position.pool.token1.symbol}
+            size="lg"
+          />
           <div>
             <h3 className="font-semibold">
               {position.pool.token0.symbol}/{position.pool.token1.symbol}
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted">
               <span>{position.pool.feeTier / 10000}% fee</span>
-              <span>•</span>
+              <span>-</span>
               <span>{position.pool.network}</span>
             </div>
           </div>

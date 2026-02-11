@@ -1,12 +1,12 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { TokenPairIcon } from '@/components/ui/TokenIcon';
 import { OnChainPosition } from '@/hooks/usePositions';
 import { PositionHistory } from '@/lib/uniswap-subgraph';
 import { V4PositionHistory } from '@/lib/v4-subgraph';
 import { formatNumber, cn } from '@/lib/utils';
-import { ExternalLink, TrendingUp, TrendingDown, Droplets, Info } from 'lucide-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchTokenPrices } from '@/lib/api';
 
 interface WalletPositionCardProps {
@@ -175,18 +175,6 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
 
   const prices = externalPrices || localPrices;
 
-  const tokenColors: Record<string, string> = {
-    ETH: '#627eea',
-    WETH: '#627eea',
-    USDC: '#2775ca',
-    USDT: '#26a17b',
-    WBTC: '#f7931a',
-    DAI: '#f5ac37',
-    LINK: '#2a5ada',
-    UNI: '#ff007a',
-    ONDO: '#1a1a2e',
-  };
-
   const token0Symbol = position.token0Symbol || 'TOKEN0';
   const token1Symbol = position.token1Symbol || 'TOKEN1';
   const token0Decimals = position.token0Decimals || 18;
@@ -335,20 +323,11 @@ export function WalletPositionCard({ position, prices: externalPrices, positionH
       {/* Header Row */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-card"
-              style={{ backgroundColor: tokenColors[token0Symbol] || '#6366f1' }}
-            >
-              {token0Symbol.charAt(0)}
-            </div>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-card"
-              style={{ backgroundColor: tokenColors[token1Symbol] || '#6366f1' }}
-            >
-              {token1Symbol.charAt(0)}
-            </div>
-          </div>
+          <TokenPairIcon
+            token0Symbol={token0Symbol}
+            token1Symbol={token1Symbol}
+            size="lg"
+          />
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">

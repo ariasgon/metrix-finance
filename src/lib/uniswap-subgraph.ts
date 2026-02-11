@@ -268,17 +268,40 @@ const UNISWAP_V3_SUBGRAPH_IDS: Record<string, string> = {
   bsc: 'F85MNzUGYqgSHSHRGgeVMNsdnW1KtZSVgFULumXRZTw2',
 };
 
-// Build subgraph URL for The Graph Gateway
-function getSubgraphUrl(network: string): string | null {
-  const subgraphId = UNISWAP_V3_SUBGRAPH_IDS[network];
-  if (!subgraphId) return null;
+// Alternative hosted subgraph endpoints (backup when decentralized network fails)
+const HOSTED_SUBGRAPH_URLS: Record<string, string> = {
+  ethereum: 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
+  arbitrum: 'https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one',
+  polygon: 'https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-v3-polygon',
+  optimism: 'https://api.thegraph.com/subgraphs/name/ianlapham/optimism-post-regenesis',
+  base: 'https://api.studio.thegraph.com/query/48211/uniswap-v3-base/version/latest',
+};
 
-  if (GRAPH_API_KEY) {
-    return `https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${subgraphId}`;
+// Build subgraph URLs (returns array for fallback attempts)
+function getSubgraphUrls(network: string): string[] {
+  const urls: string[] = [];
+  const subgraphId = UNISWAP_V3_SUBGRAPH_IDS[network];
+
+  // Add decentralized network URL first
+  if (subgraphId) {
+    if (GRAPH_API_KEY) {
+      urls.push(`https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${subgraphId}`);
+    }
+    urls.push(`https://gateway.thegraph.com/api/subgraphs/id/${subgraphId}`);
   }
 
-  // Fallback: Use The Graph's public gateway (rate limited but works for testing)
-  return `https://gateway.thegraph.com/api/subgraphs/id/${subgraphId}`;
+  // Add hosted subgraph as fallback
+  if (HOSTED_SUBGRAPH_URLS[network]) {
+    urls.push(HOSTED_SUBGRAPH_URLS[network]);
+  }
+
+  return urls;
+}
+
+// Legacy function for compatibility
+function getSubgraphUrl(network: string): string | null {
+  const urls = getSubgraphUrls(network);
+  return urls.length > 0 ? urls[0] : null;
 }
 
 interface SubgraphPool {
@@ -403,39 +426,64 @@ const SEARCH_POOLS_QUERY = `
   }
 `;
 
-// Fetch pools from The Graph
-async function fetchFromSubgraph(
+// Fetch pools from The Graph (single URL attempt)
+async function fetchFromSubgraphUrl(
   url: string,
   query: string,
   variables: Record<string, unknown>
-): Promise<SubgraphPool[]> {
+): Promise<SubgraphPool[] | null> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      const text = await response.text();
-      console.error('Subgraph request failed:', response.status, text.substring(0, 200));
-      throw new Error(`Subgraph request failed: ${response.status}`);
+      return null; // Silent fail, will try next URL
     }
 
     const data = await response.json();
 
     if (data.errors) {
-      console.error('Subgraph errors:', data.errors);
-      throw new Error(data.errors[0]?.message || 'Subgraph query failed');
+      // Log only in development, not in production
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Subgraph returned errors, trying fallback...');
+      }
+      return null;
     }
 
     return data.data?.pools || [];
-  } catch (error) {
-    console.error('Error fetching from subgraph:', error);
-    return [];
+  } catch {
+    return null; // Silent fail for network errors
   }
+}
+
+// Fetch pools from The Graph with fallback URLs
+async function fetchFromSubgraph(
+  urls: string | string[],
+  query: string,
+  variables: Record<string, unknown>
+): Promise<SubgraphPool[]> {
+  const urlList = Array.isArray(urls) ? urls : [urls];
+
+  for (const url of urlList) {
+    const pools = await fetchFromSubgraphUrl(url, query, variables);
+    if (pools && pools.length > 0) {
+      return pools;
+    }
+  }
+
+  // All URLs failed
+  return [];
 }
 
 // Convert subgraph pool to our Pool type
@@ -519,6 +567,41 @@ async function getEthPrice(): Promise<number> {
   }
 }
 
+// Token prices for mock data (approximate USD values)
+const MOCK_TOKEN_PRICES: Record<string, number> = {
+  WETH: 3500,
+  WBTC: 97000,
+  USDC: 1,
+  USDT: 1,
+  DAI: 1,
+  LINK: 15,
+  UNI: 8,
+  MATIC: 0.5,
+  ARB: 1.2,
+  AAVE: 180,
+  MKR: 1800,
+  CRV: 0.5,
+  LDO: 2,
+  ONDO: 1.2,
+  PEPE: 0.000012,
+};
+
+// Calculate sqrtPriceX96 from price ratio
+// sqrtPriceX96 = sqrt(price) * 2^96
+function priceToSqrtPriceX96(price: number): string {
+  const sqrtPrice = Math.sqrt(price);
+  const Q96 = BigInt(2) ** BigInt(96);
+  const sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * Number(Q96)));
+  return sqrtPriceX96.toString();
+}
+
+// Calculate tick from price
+// tick = log(price) / log(1.0001)
+function priceToTick(price: number): number {
+  if (price <= 0) return 0;
+  return Math.floor(Math.log(price) / Math.log(1.0001));
+}
+
 // Generate mock pools for fallback when subgraph fails
 function generateMockPools(network: string, count: number = 100): Pool[] {
   const tokenPairs = [
@@ -552,6 +635,19 @@ function generateMockPools(network: string, count: number = 100): Pool[] {
     const fees24h = volume24h * (feeTier / 1000000);
     const apr = tvl > 0 ? (fees24h * 365 / tvl) * 100 : 0;
 
+    // Get token prices
+    const token0Price = MOCK_TOKEN_PRICES[pair.token0.symbol] || 1;
+    const token1Price = MOCK_TOKEN_PRICES[pair.token1.symbol] || 1;
+
+    // Calculate the pool price (token1 per token0, adjusted for decimals)
+    // In Uniswap, sqrtPriceX96 encodes the price of token0 in terms of token1
+    const rawPrice = token0Price / token1Price;
+    const decimalAdjustment = Math.pow(10, pair.token1.decimals - pair.token0.decimals);
+    const adjustedPrice = rawPrice * decimalAdjustment;
+
+    const currentTick = priceToTick(adjustedPrice);
+    const sqrtPriceX96 = priceToSqrtPriceX96(adjustedPrice);
+
     pools.push({
       id: `0x${i.toString(16).padStart(40, '0')}`,
       exchange: 'uniswap-v3',
@@ -561,14 +657,14 @@ function generateMockPools(network: string, count: number = 100): Pool[] {
         symbol: pair.token0.symbol,
         name: pair.token0.name,
         decimals: pair.token0.decimals,
-        price: pair.token0.symbol === 'WETH' ? 3500 : pair.token0.symbol === 'WBTC' ? 97000 : 1,
+        price: token0Price,
       },
       token1: {
         address: `0x${(i * 2 + 1).toString(16).padStart(40, '0')}`,
         symbol: pair.token1.symbol,
         name: pair.token1.name,
         decimals: pair.token1.decimals,
-        price: pair.token1.symbol === 'WETH' ? 3500 : pair.token1.symbol === 'WBTC' ? 97000 : 1,
+        price: token1Price,
       },
       feeTier,
       tvl,
@@ -578,8 +674,8 @@ function generateMockPools(network: string, count: number = 100): Pool[] {
       fees7d: fees24h * 7,
       apr,
       tickSpacing: tickSpacingMap[feeTier] || 60,
-      currentTick: Math.floor(Math.random() * 100000) - 50000,
-      sqrtPriceX96: '79228162514264337593543950336',
+      currentTick,
+      sqrtPriceX96,
     });
   }
 
@@ -607,9 +703,9 @@ export async function fetchUniswapPools(
     token1,
   } = options;
 
-  const subgraphUrl = getSubgraphUrl(network);
-  if (!subgraphUrl) {
-    console.warn(`No subgraph URL for network: ${network}, using mock data`);
+  const subgraphUrls = getSubgraphUrls(network);
+  if (subgraphUrls.length === 0) {
+    // No subgraph URLs available, use mock data silently
     return generateMockPools(network, first);
   }
 
@@ -620,14 +716,14 @@ export async function fetchUniswapPools(
   try {
     if (token0 || token1) {
       // Use search query if tokens are specified
-      subgraphPools = await fetchFromSubgraph(subgraphUrl, SEARCH_POOLS_QUERY, {
+      subgraphPools = await fetchFromSubgraph(subgraphUrls, SEARCH_POOLS_QUERY, {
         token0: token0 || '',
         token1: token1 || '',
         first,
       });
     } else {
       // Use standard query
-      subgraphPools = await fetchFromSubgraph(subgraphUrl, POOLS_QUERY, {
+      subgraphPools = await fetchFromSubgraph(subgraphUrls, POOLS_QUERY, {
         first,
         skip,
         orderBy,
@@ -635,15 +731,14 @@ export async function fetchUniswapPools(
       });
     }
 
-    // If no pools returned, use mock data
+    // If no pools returned, use mock data (silently)
     if (subgraphPools.length === 0) {
-      console.warn('No pools from subgraph, using mock data');
       return generateMockPools(network, first);
     }
 
     return subgraphPools.map(pool => convertSubgraphPool(pool, network, ethPrice));
-  } catch (error) {
-    console.error('Subgraph fetch failed, using mock data:', error);
+  } catch {
+    // Subgraph unavailable, use mock data silently
     return generateMockPools(network, first);
   }
 }

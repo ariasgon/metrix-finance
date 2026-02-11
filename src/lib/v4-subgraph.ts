@@ -170,6 +170,21 @@ async function tryFetchFromSubgraph(url: string, ownerAddress: string): Promise<
   }
 }
 
+// Helper for fetch with timeout
+async function fetchWithTimeout(url: string, timeoutMs: number = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
 // Fallback: Use Etherscan API to get NFT transfers
 async function fetchV4PositionsFromEtherscan(ownerAddress: string): Promise<bigint[]> {
   try {
@@ -182,7 +197,7 @@ async function fetchV4PositionsFromEtherscan(ownerAddress: string): Promise<bigi
     const url = `${baseUrl}?module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=desc${apiKey ? `&apikey=${apiKey}` : ''}`;
 
     console.log('Fetching V4 positions from Etherscan...');
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, 15000);
     const data = await response.json();
 
     if (data.status !== '1' || !data.result) {
@@ -228,13 +243,22 @@ async function fetchV4PositionsFromEtherscan(ownerAddress: string): Promise<bigi
 // Alternative: Use Alchemy NFT API (if available)
 async function fetchV4PositionsFromAlchemy(ownerAddress: string): Promise<bigint[]> {
   const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-  if (!alchemyKey) return [];
+  if (!alchemyKey) {
+    console.log('[Alchemy] No API key configured, skipping');
+    return [];
+  }
 
   try {
     const url = `https://eth-mainnet.g.alchemy.com/nft/v3/${alchemyKey}/getNFTsForOwner?owner=${ownerAddress}&contractAddresses[]=${V4_POSITION_MANAGER_ETH}&withMetadata=false`;
 
     console.log('Fetching V4 positions from Alchemy...');
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, 15000);
+
+    if (!response.ok) {
+      console.log('[Alchemy] API returned error status:', response.status);
+      return [];
+    }
+
     const data = await response.json();
 
     if (!data.ownedNfts) {
@@ -245,8 +269,13 @@ async function fetchV4PositionsFromAlchemy(ownerAddress: string): Promise<bigint
     const tokenIds = data.ownedNfts.map((nft: any) => BigInt(nft.tokenId));
     console.log('V4 positions from Alchemy:', tokenIds);
     return tokenIds;
-  } catch (error) {
-    console.error('Error fetching from Alchemy:', error);
+  } catch (error: unknown) {
+    // Handle AbortError (timeout) separately
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log('[Alchemy] Request timed out');
+    } else {
+      console.log('[Alchemy] Fetch error (possibly network issue):', error instanceof Error ? error.message : 'Unknown error');
+    }
     return [];
   }
 }

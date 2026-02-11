@@ -1,9 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, Loader2 } from 'lucide-react';
 import { useStore } from '@/lib/store';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
 const plans = [
@@ -13,6 +17,7 @@ const plans = [
     price: 0,
     period: 'forever',
     icon: Zap,
+    priceId: null,
     features: [
       { name: 'Pool discovery', included: true },
       { name: 'Basic market metrics', included: true },
@@ -34,6 +39,7 @@ const plans = [
     price: 19,
     period: 'month',
     icon: Crown,
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro',
     features: [
       { name: 'Pool discovery', included: true },
       { name: 'Advanced market metrics', included: true },
@@ -55,6 +61,7 @@ const plans = [
     price: 99,
     period: 'month',
     icon: Sparkles,
+    priceId: process.env.NEXT_PUBLIC_STRIPE_ENTERPRISE_PRICE_ID || 'price_enterprise',
     features: [
       { name: 'Everything in Pro', included: true },
       { name: 'Unlimited positions', included: true },
@@ -66,7 +73,7 @@ const plans = [
       { name: 'Priority support', included: true },
       { name: 'Dedicated account manager', included: true },
     ],
-    cta: 'Contact Sales',
+    cta: 'Upgrade to Enterprise',
     popular: false,
     disabled: false,
   },
@@ -92,32 +99,110 @@ const faqs = [
 ];
 
 export default function PricingPage() {
-  const { setAuthModalOpen, setIsPro, isPro } = useStore();
+  const t = useTranslation();
+  const searchParams = useSearchParams();
+  const { setAuthModalOpen, isPro } = useStore();
+  const { isAuthenticated, subscriptionStatus, createCheckout, openBillingPortal, isLoading, refreshSession } = useAuth();
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleUpgrade = (planName: string) => {
-    if (planName === 'Pro') {
-      setIsPro(true);
+  // Handle success/cancel URL params
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const canceled = searchParams.get('canceled');
+
+    if (success === 'true') {
+      setMessage({ type: 'success', text: 'Payment successful! Your subscription is now active.' });
+      refreshSession(); // Refresh to get updated subscription status
+    } else if (canceled === 'true') {
+      setMessage({ type: 'error', text: 'Payment was canceled. You can try again anytime.' });
     }
-    setAuthModalOpen(true);
+  }, [searchParams, refreshSession]);
+
+  const handleUpgrade = async (planName: string, priceId: string | null) => {
+    if (!priceId) return;
+
+    // If not authenticated, open auth modal first
+    if (!isAuthenticated) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setCheckoutLoading(planName);
+    const result = await createCheckout(priceId);
+
+    if (result.url) {
+      window.location.href = result.url;
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to start checkout' });
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setCheckoutLoading('manage');
+    const result = await openBillingPortal();
+
+    if (result.url) {
+      window.location.href = result.url;
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to open billing portal' });
+      setCheckoutLoading(null);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* Status Message */}
+      {message && (
+        <div className={cn(
+          'mb-8 p-4 rounded-lg text-center',
+          message.type === 'success'
+            ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+            : 'bg-red-500/10 border border-red-500/20 text-red-400'
+        )}>
+          {message.text}
+          <button
+            onClick={() => setMessage(null)}
+            className="ml-4 underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4">
-          Simple, Transparent Pricing
+          {t('pricingTitle')}
         </h1>
         <p className="text-lg text-muted max-w-2xl mx-auto">
-          Choose the plan that best fits your DeFi investment needs. Upgrade anytime as your portfolio grows.
+          {t('pricingSubtitle')}
         </p>
+        {isAuthenticated && (subscriptionStatus === 'pro' || subscriptionStatus === 'enterprise') && (
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={handleManageSubscription}
+            disabled={checkoutLoading === 'manage'}
+          >
+            {checkoutLoading === 'manage' ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : null}
+            Manage Subscription
+          </Button>
+        )}
       </div>
 
       {/* Pricing Cards */}
       <div className="grid md:grid-cols-3 gap-8 mb-16">
         {plans.map((plan) => {
           const Icon = plan.icon;
-          const isCurrentPlan = plan.name === 'Free' && !isPro || plan.name === 'Pro' && isPro;
+          const isCurrentPlan =
+            (plan.name === 'Free' && subscriptionStatus === 'free') ||
+            (plan.name === 'Pro' && subscriptionStatus === 'pro') ||
+            (plan.name === 'Enterprise' && subscriptionStatus === 'enterprise');
+          const isUpgrading = checkoutLoading === plan.name;
 
           return (
             <Card
@@ -172,10 +257,13 @@ export default function PricingPage() {
                 variant={plan.popular ? 'primary' : 'secondary'}
                 size="lg"
                 className="w-full"
-                disabled={isCurrentPlan}
-                onClick={() => handleUpgrade(plan.name)}
+                disabled={isCurrentPlan || isUpgrading || plan.disabled}
+                onClick={() => handleUpgrade(plan.name, plan.priceId)}
               >
-                {isCurrentPlan ? 'Current Plan' : plan.cta}
+                {isUpgrading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                {isCurrentPlan ? t('currentPlan') : plan.cta}
               </Button>
             </Card>
           );

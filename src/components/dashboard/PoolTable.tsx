@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { TokenPairIcon } from '@/components/ui/TokenIcon';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
 import { Pool, PoolSortField, SortDirection } from '@/types';
 import { ChevronUp, ChevronDown, ExternalLink, Star } from 'lucide-react';
@@ -103,10 +104,11 @@ export function PoolTable({ pools, isLoading }: PoolTableProps) {
               >
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex -space-x-2">
-                      <TokenIcon symbol={pool.token0.symbol} />
-                      <TokenIcon symbol={pool.token1.symbol} />
-                    </div>
+                    <TokenPairIcon
+                      token0Symbol={pool.token0.symbol}
+                      token1Symbol={pool.token1.symbol}
+                      size="md"
+                    />
                     <div>
                       <span className="font-medium">
                         {pool.token0.symbol}/{pool.token1.symbol}
@@ -184,27 +186,3 @@ function SortableHeader({ label, field, currentField, direction, onSort }: Sorta
   );
 }
 
-function TokenIcon({ symbol }: { symbol: string }) {
-  // Simple colored circle as placeholder for token icons
-  const colors: Record<string, string> = {
-    ETH: '#627eea',
-    WETH: '#627eea',
-    USDC: '#2775ca',
-    USDT: '#26a17b',
-    WBTC: '#f7931a',
-    DAI: '#f5ac37',
-    LINK: '#2a5ada',
-    UNI: '#ff007a',
-  };
-
-  const color = colors[symbol] || '#6366f1';
-
-  return (
-    <div
-      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 border-background"
-      style={{ backgroundColor: color }}
-    >
-      {symbol.charAt(0)}
-    </div>
-  );
-}

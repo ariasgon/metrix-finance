@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Pool, Position, Exchange, Network, SimulationParams } from '@/types';
 import { EXCHANGES } from './constants';
+import { Language } from './i18n';
 
 interface AppState {
   // Exchange & Network selection
@@ -34,6 +35,10 @@ interface AppState {
   // Search
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+
+  // Language
+  language: Language;
+  setLanguage: (language: Language) => void;
 }
 
 const defaultExchange = EXCHANGES[0];
@@ -99,6 +104,10 @@ export const useStore = create<AppState>()(
       // Search
       searchQuery: '',
       setSearchQuery: (query) => set({ searchQuery: query }),
+
+      // Language
+      language: 'en',
+      setLanguage: (language) => set({ language }),
     }),
     {
       name: 'metrix-storage',
@@ -106,6 +115,7 @@ export const useStore = create<AppState>()(
         recentlyViewedPools: state.recentlyViewedPools,
         trackedPositions: state.trackedPositions,
         isPro: state.isPro,
+        language: state.language,
       }),
     }
   )

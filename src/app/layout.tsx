@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Metrix Finance - DeFi Liquidity Pool Simulator",
-  description: "Discover and simulate high-performing concentrated liquidity pools. Optimize your DeFi investments with advanced analytics.",
-  keywords: ["DeFi", "Uniswap", "Liquidity Pool", "Yield Farming", "Crypto", "Simulator"],
+  title: "Principia Metrics - DeFi Analytics & Portfolio Tracking",
+  description: "Advanced DeFi analytics platform. Track, analyze, and optimize your concentrated liquidity positions with precision metrics.",
+  keywords: ["DeFi", "Uniswap", "Liquidity Pool", "Portfolio Tracking", "Crypto Analytics", "Yield Optimization"],
 };
 
 export default function RootLayout({
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground grid-pattern`}
         suppressHydrationWarning
       >
         <Web3Provider>

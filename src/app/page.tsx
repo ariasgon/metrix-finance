@@ -7,6 +7,7 @@ import { fetchPools } from '@/lib/api';
 import { fetchProtocolStats } from '@/lib/uniswap-subgraph';
 import { Pool } from '@/types';
 import { useStore } from '@/lib/store';
+import { useTranslation } from '@/hooks/useTranslation';
 import {
   Search,
   ChevronDown,
@@ -26,14 +27,8 @@ import Link from 'next/link';
 type SortField = 'tvl' | 'volume24h' | 'apr' | 'fees24h' | 'feeTier';
 type SortDirection = 'asc' | 'desc';
 
-const NETWORKS = [
-  { id: 'ethereum', name: 'Ethereum', icon: '⟠' },
-  { id: 'arbitrum', name: 'Arbitrum', icon: '🔵' },
-  { id: 'polygon', name: 'Polygon', icon: '🟣' },
-  { id: 'optimism', name: 'Optimism', icon: '🔴' },
-  { id: 'base', name: 'Base', icon: '🔵' },
-  { id: 'bsc', name: 'BSC', icon: '🟡' },
-];
+// Default network - Ethereum mainnet only for now
+const DEFAULT_NETWORK = 'ethereum';
 
 const EXCHANGES = [
   { id: 'uniswap-v3', name: 'Uniswap V3', icon: '🦄' },
@@ -49,10 +44,12 @@ const FEE_TIERS = [
 ];
 
 export default function DiscoverPage() {
+  const t = useTranslation();
   const [pools, setPools] = useState<Pool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedNetwork, setSelectedNetwork] = useState('ethereum');
+  // Network is fixed to Ethereum mainnet
+  const selectedNetwork = DEFAULT_NETWORK;
   const [selectedExchange, setSelectedExchange] = useState('uniswap-v3');
   const [selectedFeeTier, setSelectedFeeTier] = useState('all');
   const [sortField, setSortField] = useState<SortField>('tvl');
@@ -193,11 +190,13 @@ export default function DiscoverPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold">Discover</h1>
-          <p className="text-muted mt-1">
-            Discover and analyze high-performing liquidity pools
+          <h1 className="text-3xl font-bold tracking-tight">
+            <span className="gradient-text">{t('discover')}</span>
+          </h1>
+          <p className="text-muted mt-2">
+            {t('discoverDescription')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -212,73 +211,65 @@ export default function DiscoverPage() {
             }}
           >
             <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
-            Refresh
+            {t('refresh')}
           </Button>
         </div>
       </div>
 
       {/* Protocol Stats */}
       {protocolStats && (
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-muted mb-2">
-              <DollarSign className="w-4 h-4" />
-              <span className="text-xs">Total Value Locked</span>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+          <Card hover className="p-5 group">
+            <div className="flex items-center gap-2 text-muted mb-3">
+              <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <DollarSign className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-xs font-medium uppercase tracking-wide">{t('totalValueLocked')}</span>
             </div>
-            <p className="text-xl font-bold">{formatCurrency(protocolStats.totalValueLockedUSD)}</p>
+            <p className="text-2xl font-bold">{formatCurrency(protocolStats.totalValueLockedUSD)}</p>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-muted mb-2">
-              <BarChart3 className="w-4 h-4" />
-              <span className="text-xs">Total Volume</span>
+          <Card hover className="p-5 group">
+            <div className="flex items-center gap-2 text-muted mb-3">
+              <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <BarChart3 className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-xs font-medium uppercase tracking-wide">{t('totalVolume')}</span>
             </div>
-            <p className="text-xl font-bold">{formatCurrency(protocolStats.totalVolumeUSD)}</p>
+            <p className="text-2xl font-bold">{formatCurrency(protocolStats.totalVolumeUSD)}</p>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-muted mb-2">
-              <Layers className="w-4 h-4" />
-              <span className="text-xs">Total Pools</span>
+          <Card hover className="p-5 group">
+            <div className="flex items-center gap-2 text-muted mb-3">
+              <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <Layers className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-xs font-medium uppercase tracking-wide">{t('totalPools')}</span>
             </div>
-            <p className="text-xl font-bold">{protocolStats.poolCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold">{protocolStats.poolCount.toLocaleString()}</p>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-muted mb-2">
-              <TrendingUp className="w-4 h-4" />
-              <span className="text-xs">Pools Loaded</span>
+          <Card hover className="p-5 group">
+            <div className="flex items-center gap-2 text-muted mb-3">
+              <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <TrendingUp className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-xs font-medium uppercase tracking-wide">{t('poolsLoaded')}</span>
             </div>
-            <p className="text-xl font-bold">{filteredPools.length.toLocaleString()}</p>
+            <p className="text-2xl font-bold">{filteredPools.length.toLocaleString()}</p>
           </Card>
         </div>
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-8">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+        <div className="relative flex-1 min-w-[200px] max-w-[350px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/60" />
           <input
             type="text"
-            placeholder="Search by token or pool address..."
+            placeholder={t('searchByToken')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full pl-10 pr-4 py-2.5 bg-card/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all placeholder:text-muted"
           />
-        </div>
-
-        {/* Network Selector */}
-        <div className="relative">
-          <select
-            value={selectedNetwork}
-            onChange={(e) => setSelectedNetwork(e.target.value)}
-            className="appearance-none px-3 py-2 pr-8 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-          >
-            {NETWORKS.map(network => (
-              <option key={network.id} value={network.id}>
-                {network.icon} {network.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
         </div>
 
         {/* Exchange Selector */}
@@ -286,7 +277,7 @@ export default function DiscoverPage() {
           <select
             value={selectedExchange}
             onChange={(e) => setSelectedExchange(e.target.value)}
-            className="appearance-none px-3 py-2 pr-8 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            className="appearance-none px-4 py-2.5 pr-9 bg-card/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 cursor-pointer transition-all hover:border-primary/30"
           >
             {EXCHANGES.map(exchange => (
               <option key={exchange.id} value={exchange.id}>
@@ -294,7 +285,7 @@ export default function DiscoverPage() {
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/60 pointer-events-none" />
         </div>
 
         {/* Fee Tier Filter */}
@@ -302,7 +293,7 @@ export default function DiscoverPage() {
           <select
             value={selectedFeeTier}
             onChange={(e) => setSelectedFeeTier(e.target.value)}
-            className="appearance-none px-3 py-2 pr-8 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            className="appearance-none px-4 py-2.5 pr-9 bg-card/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 cursor-pointer transition-all hover:border-primary/30"
           >
             {FEE_TIERS.map(tier => (
               <option key={tier.value} value={tier.value}>
@@ -310,7 +301,7 @@ export default function DiscoverPage() {
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/60 pointer-events-none" />
         </div>
       </div>
 
@@ -321,38 +312,38 @@ export default function DiscoverPage() {
             <thead>
               <tr className="border-b border-border bg-card">
                 <th className="text-left p-4 text-xs font-medium text-muted">#</th>
-                <th className="text-left p-4 text-xs font-medium text-muted">Pool</th>
+                <th className="text-left p-4 text-xs font-medium text-muted">{t('pool')}</th>
                 <th className="text-right p-4">
-                  <SortHeader field="tvl" label="TVL" />
+                  <SortHeader field="tvl" label={t('tvl')} />
                 </th>
                 <th className="text-right p-4">
-                  <SortHeader field="volume24h" label="Volume 24H" />
+                  <SortHeader field="volume24h" label={t('volume24h')} />
                 </th>
                 <th className="text-right p-4">
-                  <SortHeader field="fees24h" label="Fees 24H" />
+                  <SortHeader field="fees24h" label={t('fees24h')} />
                 </th>
                 <th className="text-right p-4">
-                  <SortHeader field="apr" label="APR" />
+                  <SortHeader field="apr" label={t('apr')} />
                 </th>
                 <th className="text-right p-4">
-                  <SortHeader field="feeTier" label="Fee Tier" />
+                  <SortHeader field="feeTier" label={t('feeTier')} />
                 </th>
-                <th className="text-center p-4 text-xs font-medium text-muted">Actions</th>
+                <th className="text-center p-4 text-xs font-medium text-muted">{t('actions')}</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
                   <td colSpan={8} className="p-12 text-center">
-                    <RefreshCw className="w-8 h-8 text-muted mx-auto mb-4 animate-spin" />
-                    <p className="text-muted">Loading pools from {selectedNetwork}...</p>
+                    <RefreshCw className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
+                    <p className="text-muted">{t('loadingPoolsEthereum')}</p>
                   </td>
                 </tr>
               ) : paginatedPools.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-12 text-center">
                     <Layers className="w-8 h-8 text-muted mx-auto mb-4" />
-                    <p className="text-muted">No pools found</p>
+                    <p className="text-muted">{t('noPoolsFound')}</p>
                   </td>
                 </tr>
               ) : (
@@ -412,7 +403,7 @@ export default function DiscoverPage() {
                           href={`/simulate?pool=${pool.id}`}
                           className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/80 transition-colors"
                         >
-                          Simulate
+                          {t('simulate')}
                         </Link>
                         <a
                           href={`https://info.uniswap.org/#/pools/${pool.id}`}
@@ -435,7 +426,7 @@ export default function DiscoverPage() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between p-4 border-t border-border">
             <p className="text-sm text-muted">
-              Showing {(page - 1) * poolsPerPage + 1} to {Math.min(page * poolsPerPage, filteredPools.length)} of {filteredPools.length} pools
+              {t('showing')} {(page - 1) * poolsPerPage + 1} {t('to')} {Math.min(page * poolsPerPage, filteredPools.length)} {t('of')} {filteredPools.length} {t('pools')}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -444,10 +435,10 @@ export default function DiscoverPage() {
                 disabled={page === 1}
                 onClick={() => setPage(p => p - 1)}
               >
-                Previous
+                {t('previous')}
               </Button>
               <span className="text-sm text-muted px-2">
-                Page {page} of {totalPages}
+                {t('page')} {page} {t('of')} {totalPages}
               </span>
               <Button
                 variant="outline"
@@ -455,7 +446,7 @@ export default function DiscoverPage() {
                 disabled={page === totalPages}
                 onClick={() => setPage(p => p + 1)}
               >
-                Next
+                {t('next')}
               </Button>
             </div>
           </div>

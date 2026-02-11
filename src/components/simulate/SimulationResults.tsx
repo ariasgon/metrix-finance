@@ -1,16 +1,18 @@
 'use client';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { SimulationResult } from '@/types';
-import { formatCurrency, formatPercent, cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown, DollarSign, Percent, Clock, AlertCircle } from 'lucide-react';
+import { TokenIcon } from '@/components/ui/TokenIcon';
+import { SimulationResult, Pool } from '@/types';
+import { formatCurrency, formatPercent, formatNumber, cn } from '@/lib/utils';
+import { TrendingUp, TrendingDown, DollarSign, Clock, AlertCircle, Coins } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface SimulationResultsProps {
   result: SimulationResult | null;
+  pool: Pool | null;
 }
 
-export function SimulationResults({ result }: SimulationResultsProps) {
+export function SimulationResults({ result, pool }: SimulationResultsProps) {
   if (!result) {
     return (
       <Card className="p-8 text-center">
@@ -34,7 +36,7 @@ export function SimulationResults({ result }: SimulationResultsProps) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <ResultCard
           icon={<DollarSign className="w-4 h-4" />}
           label="Estimated Fees"
@@ -46,7 +48,7 @@ export function SimulationResults({ result }: SimulationResultsProps) {
           icon={<AlertCircle className="w-4 h-4" />}
           label="Impermanent Loss"
           value={formatCurrency(result.impermanentLoss)}
-          subValue="Estimated IL"
+          subValue="Expected IL"
           negative
         />
         <ResultCard
@@ -73,7 +75,7 @@ export function SimulationResults({ result }: SimulationResultsProps) {
           <h3 className="font-semibold">Projected Fee Earnings</h3>
         </CardHeader>
         <CardContent>
-          <div className="h-64">
+          <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
@@ -123,27 +125,36 @@ export function SimulationResults({ result }: SimulationResultsProps) {
       {/* Position Breakdown */}
       <Card>
         <CardHeader>
-          <h3 className="font-semibold">Position Breakdown</h3>
+          <div className="flex items-center gap-2">
+            <Coins className="w-4 h-4 text-muted" />
+            <h3 className="font-semibold">Position Breakdown</h3>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-background rounded-lg p-4">
-              <p className="text-sm text-muted mb-1">Token 0 Amount</p>
-              <p className="text-lg font-semibold">{result.token0Amount.toFixed(6)}</p>
+              <div className="flex items-center gap-2 mb-2">
+                {pool && <TokenIcon symbol={pool.token0.symbol} size="sm" />}
+                <p className="text-sm text-muted">{pool?.token0.symbol || 'Token 0'}</p>
+              </div>
+              <p className="text-lg font-semibold">{formatNumber(result.token0Amount, 6)}</p>
             </div>
             <div className="bg-background rounded-lg p-4">
-              <p className="text-sm text-muted mb-1">Token 1 Amount</p>
-              <p className="text-lg font-semibold">{result.token1Amount.toFixed(6)}</p>
+              <div className="flex items-center gap-2 mb-2">
+                {pool && <TokenIcon symbol={pool.token1.symbol} size="sm" />}
+                <p className="text-sm text-muted">{pool?.token1.symbol || 'Token 1'}</p>
+              </div>
+              <p className="text-lg font-semibold">{formatNumber(result.token1Amount, 6)}</p>
             </div>
           </div>
 
           <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
             <h4 className="text-sm font-medium text-primary mb-2">Key Insights</h4>
             <ul className="text-sm text-muted space-y-1">
-              <li>• Narrower ranges earn more fees but have higher IL risk</li>
-              <li>• Your position {result.inRange ? 'is' : 'is not'} currently earning fees</li>
-              <li>• Expected to be in range {formatPercent(result.timeInRange, false)} of the time</li>
-              <li>• Consider rebalancing if price moves significantly outside your range</li>
+              <li>Narrower ranges earn more fees but have higher IL risk</li>
+              <li>Your position {result.inRange ? 'is' : 'is not'} currently earning fees</li>
+              <li>Expected to be in range {formatPercent(result.timeInRange, false)} of the time</li>
+              <li>Consider rebalancing if price moves significantly outside your range</li>
             </ul>
           </div>
         </CardContent>

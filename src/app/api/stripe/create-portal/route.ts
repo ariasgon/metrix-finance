@@ -1,0 +1,38 @@
+import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
+import { getSession } from '@/lib/auth/utils';
+import { prisma } from '@/lib/prisma';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-12-18.acacia',
+});
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getSession(request);
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId: session.userId }
+    });
+
+    if (!subscription?.stripeCustomerId) {
+      return NextResponse.json({ error: 'No subscription found' }, { status: 404 });
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: subscription.stripeCustomerId,
+      return_url: `${baseUrl}/pricing`,
+    });
+
+    return NextResponse.json({ url: portalSession.url });
+  } catch (error) {
+    console.error('Create portal error:', error);
+    return NextResponse.json({ error: 'Failed to create portal' }, { status: 500 });
+  }
+}

@@ -95,3 +95,6 @@ export interface Network {
 
 export type SortDirection = 'asc' | 'desc';
 export type PoolSortField = 'tvl' | 'volume24h' | 'fees24h' | 'apr';
+
+// Language
+export type Language = 'en' | 'es' | 'pt' | 'fr' | 'de';

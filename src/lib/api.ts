@@ -13,6 +13,37 @@ const FEAR_GREED_API = 'https://api.alternative.me/fng';
 let priceCache: { prices: Record<string, number>; timestamp: number } | null = null;
 const CACHE_DURATION = 60000; // 1 minute
 
+// Helper for fetch with timeout
+async function fetchWithTimeout(url: string, timeoutMs: number = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+// Default fallback prices (updated periodically as reasonable estimates)
+const FALLBACK_PRICES: Record<string, number> = {
+  ETH: 3500,
+  WETH: 3500,
+  BTC: 97000,
+  WBTC: 97000,
+  USDC: 1,
+  USDT: 1,
+  DAI: 1,
+  LINK: 25,
+  UNI: 14,
+  MATIC: 0.5,
+  ARB: 1,
+  ONDO: 1.5,
+};
+
 // Fetch token prices from CoinGecko
 export async function fetchTokenPrices(): Promise<Record<string, number>> {
   // Check cache
@@ -22,12 +53,14 @@ export async function fetchTokenPrices(): Promise<Record<string, number>> {
 
   try {
     const ids = 'ethereum,bitcoin,usd-coin,tether,wrapped-bitcoin,dai,chainlink,uniswap,matic-network,arbitrum,ondo-finance';
-    const response = await fetch(
-      `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+    const response = await fetchWithTimeout(
+      `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+      10000
     );
 
     if (!response.ok) {
-      throw new Error('CoinGecko API error');
+      console.log('[CoinGecko] API returned error status:', response.status);
+      return priceCache?.prices || FALLBACK_PRICES;
     }
 
     const data = await response.json();
@@ -49,23 +82,15 @@ export async function fetchTokenPrices(): Promise<Record<string, number>> {
 
     priceCache = { prices, timestamp: Date.now() };
     return prices;
-  } catch (error) {
-    console.error('Error fetching prices from CoinGecko:', error);
-    // Return fallback prices if API fails
-    return {
-      ETH: 3500,
-      WETH: 3500,
-      BTC: 97000,
-      WBTC: 97000,
-      USDC: 1,
-      USDT: 1,
-      DAI: 1,
-      LINK: 25,
-      UNI: 14,
-      MATIC: 0.5,
-      ARB: 1,
-      ONDO: 1.5,
-    };
+  } catch (error: unknown) {
+    // Handle timeout and network errors gracefully
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log('[CoinGecko] Request timed out, using cached/fallback prices');
+    } else {
+      console.log('[CoinGecko] Fetch error:', error instanceof Error ? error.message : 'Unknown error');
+    }
+    // Return cached prices if available, otherwise fallback
+    return priceCache?.prices || FALLBACK_PRICES;
   }
 }
 
