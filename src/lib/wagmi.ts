@@ -1,10 +1,21 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { mainnet, arbitrum, polygon, optimism, base, bsc } from 'wagmi/chains';
+import { http } from 'wagmi';
+
+const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || 'demo';
 
 export const config = getDefaultConfig({
   appName: 'Metrix Finance',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id',
   chains: [mainnet, arbitrum, polygon, optimism, base, bsc],
+  transports: {
+    [mainnet.id]: http(`https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [arbitrum.id]: http(`https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [polygon.id]: http(`https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [optimism.id]: http(`https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [base.id]: http(`https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [bsc.id]: http('https://bsc-dataseed.binance.org'),
+  },
   ssr: true,
 });
 

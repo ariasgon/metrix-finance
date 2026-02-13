@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -98,7 +98,7 @@ const faqs = [
   },
 ];
 
-export default function PricingPage() {
+function PricingPageContent() {
   const t = useTranslation();
   const searchParams = useSearchParams();
   const { setAuthModalOpen, isPro } = useStore();
@@ -350,4 +350,12 @@ function FeatureValue({ value }: { value: boolean | string }) {
     );
   }
   return <span className="text-sm">{value}</span>;
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 py-12 text-center">Loading...</div>}>
+      <PricingPageContent />
+    </Suspense>
+  );
 }

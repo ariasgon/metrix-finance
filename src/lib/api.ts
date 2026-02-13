@@ -53,10 +53,12 @@ export async function fetchTokenPrices(): Promise<Record<string, number>> {
 
   try {
     const ids = 'ethereum,bitcoin,usd-coin,tether,wrapped-bitcoin,dai,chainlink,uniswap,matic-network,arbitrum,ondo-finance';
-    const response = await fetchWithTimeout(
-      `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-      10000
-    );
+    // Use proxy API route to avoid CORS issues
+    const apiUrl = typeof window !== 'undefined'
+      ? `/api/proxy/coingecko?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+      : `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+
+    const response = await fetchWithTimeout(apiUrl, 10000);
 
     if (!response.ok) {
       console.log('[CoinGecko] API returned error status:', response.status);

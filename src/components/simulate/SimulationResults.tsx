@@ -106,7 +106,7 @@ export function SimulationResults({ result, pool }: SimulationResultsProps) {
                     borderRadius: '8px',
                   }}
                   labelStyle={{ color: '#71717a' }}
-                  formatter={(value: number) => [formatCurrency(value), 'Cumulative Fees']}
+                  formatter={(value: number | undefined) => [formatCurrency(value ?? 0), 'Cumulative Fees']}
                   labelFormatter={(label) => `Day ${label}`}
                 />
                 <Area
