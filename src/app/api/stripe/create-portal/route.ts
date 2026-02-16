@@ -3,9 +3,9 @@ import Stripe from 'stripe';
 import { getSession } from '@/lib/auth/utils';
 import { prisma } from '@/lib/prisma';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-});
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +14,16 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Check if Stripe is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Payment service not configured' }, { status: 500 });
+    }
+
+    // Initialize Stripe
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    });
 
     const subscription = await prisma.subscription.findUnique({
       where: { userId: session.userId }

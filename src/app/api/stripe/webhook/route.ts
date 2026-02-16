@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-});
+// Force dynamic rendering - don't try to statically optimize this route at build time
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +14,17 @@ export async function POST(request: NextRequest) {
     if (!signature) {
       return NextResponse.json({ error: 'No signature' }, { status: 400 });
     }
+
+    // Check if Stripe is configured
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+      console.error('Stripe not configured');
+      return NextResponse.json({ error: 'Payment service not configured' }, { status: 500 });
+    }
+
+    // Initialize Stripe only after validation
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    });
 
     let event: Stripe.Event;
 
