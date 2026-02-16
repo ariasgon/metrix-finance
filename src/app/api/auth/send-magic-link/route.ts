@@ -4,10 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { nanoid } from 'nanoid';
 import { hashToken } from '@/lib/auth/utils';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(request: NextRequest) {
   try {
+    // Initialize Resend only when needed (not at module level)
+    const resend = new Resend(process.env.RESEND_API_KEY || '');
+
     const { email } = await request.json();
 
     if (!email || !email.includes('@')) {
