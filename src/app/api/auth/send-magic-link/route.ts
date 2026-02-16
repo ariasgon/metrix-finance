@@ -4,16 +4,26 @@ import { prisma } from '@/lib/prisma';
 import { nanoid } from 'nanoid';
 import { hashToken } from '@/lib/auth/utils';
 
+// Force dynamic rendering - don't try to statically optimize this route at build time
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
-    // Initialize Resend only when needed (not at module level)
-    const resend = new Resend(process.env.RESEND_API_KEY || '');
-
     const { email } = await request.json();
 
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
     }
+
+    // Check if Resend API key is configured
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY not configured');
+      return NextResponse.json({ error: 'Email service not configured' }, { status: 500 });
+    }
+
+    // Initialize Resend only after validation
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
     const normalizedEmail = email.toLowerCase().trim();
 
