@@ -2,18 +2,31 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { mainnet, arbitrum, polygon, optimism, base, bsc } from 'wagmi/chains';
 import { http } from 'wagmi';
 
-const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || 'demo';
+const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+
+// Use public RPC endpoints if Alchemy key is not properly configured
+const hasValidAlchemyKey = alchemyKey && alchemyKey.length > 20 && alchemyKey !== 'demo';
 
 export const config = getDefaultConfig({
   appName: 'Metrix Finance',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id',
   chains: [mainnet, arbitrum, polygon, optimism, base, bsc],
   transports: {
-    [mainnet.id]: http(`https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`),
-    [arbitrum.id]: http(`https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`),
-    [polygon.id]: http(`https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`),
-    [optimism.id]: http(`https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`),
-    [base.id]: http(`https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`),
+    [mainnet.id]: http(hasValidAlchemyKey
+      ? `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : 'https://eth.llamarpc.com'),
+    [arbitrum.id]: http(hasValidAlchemyKey
+      ? `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : 'https://arbitrum.llamarpc.com'),
+    [polygon.id]: http(hasValidAlchemyKey
+      ? `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : 'https://polygon.llamarpc.com'),
+    [optimism.id]: http(hasValidAlchemyKey
+      ? `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : 'https://optimism.llamarpc.com'),
+    [base.id]: http(hasValidAlchemyKey
+      ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
+      : 'https://base.llamarpc.com'),
     [bsc.id]: http('https://bsc-dataseed.binance.org'),
   },
   ssr: true,
