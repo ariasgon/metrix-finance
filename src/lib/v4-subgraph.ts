@@ -188,15 +188,16 @@ async function fetchWithTimeout(url: string, timeoutMs: number = 10000): Promise
 // Fallback: Use Etherscan API to get NFT transfers
 async function fetchV4PositionsFromEtherscan(ownerAddress: string): Promise<bigint[]> {
   try {
-    // Etherscan API - free tier allows 5 calls/sec
+    // Etherscan API V2 - free tier allows 5 calls/sec
     // We'll look for ERC721 transfers TO the owner address
     const apiKey = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
-    const baseUrl = 'https://api.etherscan.io/api';
+    const baseUrl = 'https://api.etherscan.io/v2/api';
 
     // Get ERC721 token transfers for the V4 Position Manager contract to this address
-    const url = `${baseUrl}?module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=desc${apiKey ? `&apikey=${apiKey}` : ''}`;
+    // V2 API format
+    const url = `${baseUrl}?chainid=1&module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=desc${apiKey ? `&apikey=${apiKey}` : ''}`;
 
-    console.log('Fetching V4 positions from Etherscan...');
+    console.log('Fetching V4 positions from Etherscan V2 API...');
     const response = await fetchWithTimeout(url, 15000);
     const data = await response.json();
 
@@ -317,10 +318,10 @@ export async function fetchV4PositionHistory(
 ): Promise<V4PositionHistory | null> {
   try {
     const apiKey = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
-    const baseUrl = 'https://api.etherscan.io/api';
+    const baseUrl = 'https://api.etherscan.io/v2/api';
 
-    // Get NFT transfer events for this specific token
-    const url = `${baseUrl}?module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=asc${apiKey ? `&apikey=${apiKey}` : ''}`;
+    // Get NFT transfer events for this specific token (V2 API)
+    const url = `${baseUrl}?chainid=1&module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=asc${apiKey ? `&apikey=${apiKey}` : ''}`;
 
     console.log(`Fetching V4 position history for token ${tokenId}...`);
     const response = await fetch(url);
@@ -519,10 +520,10 @@ export async function fetchV4PositionsHistory(
 
     // Step 2: Get mint timestamps from Etherscan (as fallback)
     const apiKey = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
-    const baseUrl = 'https://api.etherscan.io/api';
-    const url = `${baseUrl}?module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=asc${apiKey ? `&apikey=${apiKey}` : ''}`;
+    const baseUrl = 'https://api.etherscan.io/v2/api';
+    const url = `${baseUrl}?chainid=1&module=account&action=tokennfttx&contractaddress=${V4_POSITION_MANAGER_ETH}&address=${ownerAddress}&sort=asc${apiKey ? `&apikey=${apiKey}` : ''}`;
 
-    console.log('Fetching V4 positions history from Etherscan...');
+    console.log('Fetching V4 positions history from Etherscan V2 API...');
     const response = await fetch(url);
     const data = await response.json();
 
