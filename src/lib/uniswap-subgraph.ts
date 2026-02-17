@@ -5,6 +5,15 @@ import { Pool } from '@/types';
 // The Graph Gateway API Key (free tier available at https://thegraph.com/studio/)
 const GRAPH_API_KEY = process.env.NEXT_PUBLIC_GRAPH_API_KEY || '';
 
+// Validate API key format (only log once)
+let apiKeyWarningLogged = false;
+if (!apiKeyWarningLogged && typeof window !== 'undefined') {
+  if (!GRAPH_API_KEY || GRAPH_API_KEY.length < 20) {
+    console.warn('[The Graph] No valid API key found. Using public gateway (rate limited). Get a free key at: https://thegraph.com/studio/');
+    apiKeyWarningLogged = true;
+  }
+}
+
 // Chain ID to network name mapping
 const CHAIN_ID_TO_NETWORK: Record<number, string> = {
   1: 'ethereum',
@@ -268,31 +277,18 @@ const UNISWAP_V3_SUBGRAPH_IDS: Record<string, string> = {
   bsc: 'F85MNzUGYqgSHSHRGgeVMNsdnW1KtZSVgFULumXRZTw2',
 };
 
-// Alternative hosted subgraph endpoints (backup when decentralized network fails)
-const HOSTED_SUBGRAPH_URLS: Record<string, string> = {
-  ethereum: 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
-  arbitrum: 'https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one',
-  polygon: 'https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-v3-polygon',
-  optimism: 'https://api.thegraph.com/subgraphs/name/ianlapham/optimism-post-regenesis',
-  base: 'https://api.studio.thegraph.com/query/48211/uniswap-v3-base/version/latest',
-};
-
 // Build subgraph URLs (returns array for fallback attempts)
 function getSubgraphUrls(network: string): string[] {
   const urls: string[] = [];
   const subgraphId = UNISWAP_V3_SUBGRAPH_IDS[network];
 
-  // Add decentralized network URL first
+  // Only use decentralized network URLs (hosted service is deprecated and causes CORS)
   if (subgraphId) {
-    if (GRAPH_API_KEY) {
+    if (GRAPH_API_KEY && GRAPH_API_KEY.length > 20) {
       urls.push(`https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${subgraphId}`);
     }
+    // Free tier gateway (rate limited but no CORS issues)
     urls.push(`https://gateway.thegraph.com/api/subgraphs/id/${subgraphId}`);
-  }
-
-  // Add hosted subgraph as fallback
-  if (HOSTED_SUBGRAPH_URLS[network]) {
-    urls.push(HOSTED_SUBGRAPH_URLS[network]);
   }
 
   return urls;
@@ -815,62 +811,73 @@ export async function fetchProtocolStats(network: string = 'ethereum'): Promise<
   poolCount: number;
   txCount: number;
 }> {
-  const subgraphUrl = getSubgraphUrl(network);
-  if (!subgraphUrl) {
-    // Return realistic mock stats
-    return {
-      totalValueLockedUSD: 3_200_000_000,
-      totalVolumeUSD: 1_850_000_000_000,
-      poolCount: 365,
-      txCount: 450_000_000,
-    };
+  const mockStats = {
+    totalValueLockedUSD: 3_200_000_000,
+    totalVolumeUSD: 1_850_000_000_000,
+    poolCount: 365,
+    txCount: 450_000_000,
+  };
+
+  const subgraphUrls = getSubgraphUrls(network);
+  if (subgraphUrls.length === 0) {
+    return mockStats;
   }
 
-  try {
-    const response = await fetch(subgraphUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `
-          query {
-            factories(first: 1) {
-              totalValueLockedUSD
-              totalVolumeUSD
-              poolCount
-              txCount
-            }
-          }
-        `,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (data.errors) {
-      console.warn('Protocol stats query failed:', data.errors[0]?.message);
-      return {
-        totalValueLockedUSD: 3_200_000_000,
-        totalVolumeUSD: 1_850_000_000_000,
-        poolCount: 365,
-        txCount: 450_000_000,
-      };
+  const query = `
+    query {
+      factories(first: 1) {
+        totalValueLockedUSD
+        totalVolumeUSD
+        poolCount
+        txCount
+      }
     }
+  `;
 
-    const factory = data.data?.factories?.[0];
+  // Try all available subgraph URLs
+  for (const url of subgraphUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    return {
-      totalValueLockedUSD: parseFloat(factory?.totalValueLockedUSD || '3200000000'),
-      totalVolumeUSD: parseFloat(factory?.totalVolumeUSD || '1850000000000'),
-      poolCount: parseInt(factory?.poolCount || '365'),
-      txCount: parseInt(factory?.txCount || '450000000'),
-    };
-  } catch (error) {
-    console.error('Error fetching protocol stats:', error);
-    return {
-      totalValueLockedUSD: 3_200_000_000,
-      totalVolumeUSD: 1_850_000_000_000,
-      poolCount: 365,
-      txCount: 450_000_000,
-    };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        continue; // Try next URL
+      }
+
+      const data = await response.json();
+
+      if (data.errors) {
+        // Suppress auth error messages - they're expected without API keys
+        if (process.env.NODE_ENV === 'development' && !data.errors[0]?.message?.includes('auth')) {
+          console.warn('Protocol stats query failed:', data.errors[0]?.message);
+        }
+        continue; // Try next URL
+      }
+
+      const factory = data.data?.factories?.[0];
+      if (factory) {
+        return {
+          totalValueLockedUSD: parseFloat(factory.totalValueLockedUSD || '3200000000'),
+          totalVolumeUSD: parseFloat(factory.totalVolumeUSD || '1850000000000'),
+          poolCount: parseInt(factory.poolCount || '365'),
+          txCount: parseInt(factory.txCount || '450000000'),
+        };
+      }
+    } catch (error) {
+      // Silently continue to next URL
+      continue;
+    }
   }
+
+  // All URLs failed - return mock data silently
+  return mockStats;
 }

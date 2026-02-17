@@ -17,16 +17,16 @@ export const config = getDefaultConfig({
       : 'https://eth.llamarpc.com'),
     [arbitrum.id]: http(hasValidAlchemyKey
       ? `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://arbitrum.llamarpc.com'),
+      : 'https://arbitrum.drpc.org'),
     [polygon.id]: http(hasValidAlchemyKey
       ? `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://polygon.llamarpc.com'),
+      : 'https://polygon.drpc.org'),
     [optimism.id]: http(hasValidAlchemyKey
       ? `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://optimism.llamarpc.com'),
+      : 'https://optimism.drpc.org'),
     [base.id]: http(hasValidAlchemyKey
       ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://base.llamarpc.com'),
+      : 'https://base.drpc.org'),
     [bsc.id]: http('https://bsc-dataseed.binance.org'),
   },
   ssr: true,
