@@ -284,7 +284,21 @@ async function fetchV4PositionsFromAlchemy(ownerAddress: string): Promise<bigint
 export async function fetchV4PositionTokenIds(ownerAddress: string): Promise<bigint[]> {
   console.log('Fetching V4 positions for:', ownerAddress);
 
-  // Method 1: Try The Graph subgraph (requires NEXT_PUBLIC_GRAPH_API_KEY)
+  // Delegate to server-side API route so API keys are read from runtime env vars
+  try {
+    const res = await fetch(`/api/v4-positions?address=${ownerAddress}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.tokenIds?.length > 0) {
+        console.log(`V4 positions from server (${data.source}):`, data.tokenIds);
+        return data.tokenIds.map((id: string) => BigInt(id));
+      }
+    }
+  } catch (error) {
+    console.log('Server API call failed, trying client-side fallbacks:', error);
+  }
+
+  // Client-side fallback: The Graph subgraph (if key was baked at build time)
   if (DECENTRALIZED_SUBGRAPH_URL) {
     console.log('Trying The Graph subgraph...');
     const positions = await tryFetchFromSubgraph(DECENTRALIZED_SUBGRAPH_URL, ownerAddress);
@@ -294,13 +308,13 @@ export async function fetchV4PositionTokenIds(ownerAddress: string): Promise<big
     }
   }
 
-  // Method 2: Try Alchemy NFT API (requires NEXT_PUBLIC_ALCHEMY_API_KEY)
+  // Client-side fallback: Alchemy (if key was baked at build time)
   const alchemyPositions = await fetchV4PositionsFromAlchemy(ownerAddress);
   if (alchemyPositions.length > 0) {
     return alchemyPositions;
   }
 
-  // Method 3: Fallback to Etherscan (works without API key, but rate limited)
+  // Client-side fallback: Etherscan
   const etherscanPositions = await fetchV4PositionsFromEtherscan(ownerAddress);
   if (etherscanPositions.length > 0) {
     return etherscanPositions;
