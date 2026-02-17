@@ -3,8 +3,9 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files
+# Copy package files and prisma schema (needed for postinstall)
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 # Rebuild the source code only when needed
