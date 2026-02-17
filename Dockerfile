@@ -1,6 +1,6 @@
 # Install dependencies only when needed
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
 # Copy package files and prisma schema (needed for postinstall)
@@ -10,11 +10,12 @@ RUN npm ci
 
 # Rebuild the source code only when needed
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client with correct binary for Alpine/OpenSSL 3
 RUN npx prisma generate
 
 # Build Next.js
@@ -23,6 +24,8 @@ RUN npm run build
 
 # Production image, copy all the files and run next
 FROM node:20-alpine AS runner
+# Install OpenSSL so Prisma can detect the version and load the correct engine
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -36,7 +39,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+# Copy Prisma engines to both locations (standalone server uses its own node_modules)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/.prisma ./.next/standalone/node_modules/.prisma
 
 USER nextjs
 
