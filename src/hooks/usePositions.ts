@@ -1,7 +1,7 @@
 'use client';
 
 import { useAccount, useReadContract, useChainId, useConfig } from 'wagmi';
-import { readContracts, getPublicClient } from 'wagmi/actions';
+import { readContracts, readContract, getPublicClient } from 'wagmi/actions';
 import { POSITION_MANAGER_ABI, ERC20_ABI, V4_POSITION_MANAGER_ABI, V4_STATE_VIEW_ABI, V4_STATE_VIEW_ADDRESSES, POOL_ABI, FACTORY_ABI } from '@/lib/contracts';
 import { POSITION_MANAGER_ADDRESSES, V4_POSITION_MANAGER_ADDRESSES, FACTORY_ADDRESSES } from '@/lib/wagmi';
 import { useState, useEffect, useCallback } from 'react';
@@ -575,32 +575,24 @@ export function usePositions() {
           try {
             console.log(`Fetching V4 position details for token ID: ${tokenId}`);
 
-            // Get pool and position info
-            const positionInfoContracts = [
-              {
+            // Get pool and position info - use individual readContract calls to bypass
+            // multicall3, which reverts when used with the V4 PositionManager
+            const [poolAndPositionInfo, liquidity] = await Promise.all([
+              readContract(config, {
                 address: v4PositionManagerAddress,
                 abi: V4_POSITION_MANAGER_ABI,
                 functionName: 'getPoolAndPositionInfo',
                 args: [tokenId],
                 chainId: v4ChainId,
-              },
-              {
+              }).catch(() => undefined),
+              readContract(config, {
                 address: v4PositionManagerAddress,
                 abi: V4_POSITION_MANAGER_ABI,
                 functionName: 'getPositionLiquidity',
                 args: [tokenId],
                 chainId: v4ChainId,
-              },
-            ];
-
-            const positionInfoResults = await readContracts(config, {
-              contracts: positionInfoContracts as any,
-            });
-
-            console.log(`Position info results for token ${tokenId}:`, positionInfoResults);
-
-            const poolAndPositionInfo = positionInfoResults[0]?.result as [any, bigint] | undefined;
-            const liquidity = positionInfoResults[1]?.result as bigint;
+              }).catch(() => undefined as bigint | undefined),
+            ]);
 
             console.log(`Pool info for token ${tokenId}:`, poolAndPositionInfo);
             console.log(`Liquidity for token ${tokenId}:`, liquidity);
