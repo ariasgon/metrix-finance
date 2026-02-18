@@ -597,7 +597,7 @@ export function usePositions() {
             console.log(`Pool info for token ${tokenId}:`, poolAndPositionInfo);
             console.log(`Liquidity for token ${tokenId}:`, liquidity);
 
-            if (!poolAndPositionInfo || liquidity === BigInt(0)) {
+            if (!poolAndPositionInfo || !liquidity) {
               console.log(`Skipping token ${tokenId} - no pool info or zero liquidity`);
               continue;
             }
